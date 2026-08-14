@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\VisualInspection.Core\VisualInspection.Core.csproj" />
+    <ProjectReference Include="..\VisualInspection.Infrastructure\VisualInspection.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <Version>0.6.0</Version>
+    <InformationalVersion>0.6.0-onnx-yolo-e2e-zh-CN</InformationalVersion>
+  </PropertyGroup>
+
+</Project>
