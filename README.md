@@ -4,6 +4,24 @@
 
 开发语言固定为 **C#**，使用 .NET 8、WPF 和 MVVM。产品主体不得改用 Python、C++、JavaScript/TypeScript 或其他语言；PowerShell 仅承担构建与验收编排，厂商原生运行库必须通过 C# 适配器隔离。
 
+## 当前分支状态
+
+- `v1.0.0` 标签冻结了旧版设置界面及其完整功能基线；该标签中的应用程序集版本仍为 v0.6.0。
+- 当前 `agent/v2-wizard-ui` 分支新增“测试序列设置 V2”前端原型：顶部按真实配置流程展示 9 个步骤，下方一次只显示当前步骤；步骤条可横向滚动，不把参考图中的 5 步写死。
+- V2 当前只实现页面、上一步/下一步、顶部跳转、姿态步骤跳过和最终确认状态；页面使用示例数据，**不会读取、保存或发布项目配置**。旧版设置代码仍保留，待 V2 界面评审通过后再分步接入业务。
+
+直接打开 V2 前端预览：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-preview
+```
+
+生成用于视觉核验的首屏快照：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-snapshot
+```
+
 ## 当前可验收版本
 
 当前版本为 **v0.6.0 ONNX YOLO 端到端推理验收版**，已形成可直接启动的 Windows Release：
@@ -83,7 +101,7 @@ dotnet run --project src/VisualInspection.App/VisualInspection.App.csproj
 ## 目录
 
 ```text
-src/VisualInspection.App             WPF 工作台、Admin 图源页、内置验收数据与启动编排
+src/VisualInspection.App             WPF 工作台、Admin 图源页、经典设置页、V2 顺序向导前端、内置验收数据与启动编排
 src/VisualInspection.Core            配置、Test Sequence 编辑、规则、分析/模型契约与 Runner
 src/VisualInspection.Infrastructure  Folder、ONNX Runtime/标签读取、YOLO 端到端输出、验收清单、JSON 配置与日志
 tests/VisualInspection.Core.Tests    规则、配置/序列编辑、ONNX 元数据/真实模型与文件夹批量探针、存储、Folder 与 Runner 回归测试

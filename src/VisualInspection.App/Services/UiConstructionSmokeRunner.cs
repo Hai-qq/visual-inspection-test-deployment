@@ -37,6 +37,7 @@ public static class UiConstructionSmokeRunner
                 SampleProjectFactory.Create(bootstrap.DemoDataDirectory),
                 bootstrap.Store,
                 bootstrap.PreviewFrame);
+            var wizardV2Window = new TestSequenceWizardV2Window();
             loginWindow.Show();
             loginWindow.UpdateLayout();
             loginWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -65,12 +66,51 @@ public static class UiConstructionSmokeRunner
             }
 
             sequenceSettingsWindow.Close();
+            wizardV2Window.Show();
+            wizardV2Window.UpdateLayout();
+            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.CurrentStepIndex != 1)
+            {
+                throw new InvalidOperationException("V2 向导下一步交互冒烟失败。");
+            }
+
+            wizardV2Window.PreviousButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.CurrentStepIndex != 0)
+            {
+                throw new InvalidOperationException("V2 向导上一步交互冒烟失败。");
+            }
+
+            for (var index = 0; index < 6; index++)
+            {
+                wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            }
+
+            if (wizardV2Window.CurrentStepIndex != 6)
+            {
+                throw new InvalidOperationException("V2 向导顺序导航冒烟失败。");
+            }
+
+            wizardV2Window.SkipPoseButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.CurrentStepIndex != 7)
+            {
+                throw new InvalidOperationException("V2 向导姿态跳过交互冒烟失败。");
+            }
+
+            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.NextButton.IsEnabled || wizardV2Window.PrototypeStatusBorder.Visibility != Visibility.Visible)
+            {
+                throw new InvalidOperationException("V2 向导最终确认状态冒烟失败。");
+            }
+
+            wizardV2Window.Close();
             mainWindow.Close();
 
             Directory.CreateDirectory(Path.GetDirectoryName(ReceiptPath)!);
             await File.WriteAllTextAsync(
                 ReceiptPath,
-                $"通过{Environment.NewLine}{DateTimeOffset.UtcNow:O}{Environment.NewLine}登录窗口 + 主窗口 + 图像源设置窗口 + 测试序列设置窗口 + 普通检测项新增/删除",
+                $"通过{Environment.NewLine}{DateTimeOffset.UtcNow:O}{Environment.NewLine}登录窗口 + 主窗口 + 图像源设置窗口 + 经典测试序列设置窗口 + 普通检测项新增/删除 + V2 向导前后导航/姿态跳过/最终确认",
                 cancellationToken);
             return 0;
         }
