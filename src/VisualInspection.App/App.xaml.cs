@@ -15,6 +15,27 @@ public partial class App : Application
 
         try
         {
+            if (e.Args.Contains("--v2-wizard-snapshot", StringComparer.OrdinalIgnoreCase))
+            {
+                var snapshot = new TestSequenceWizardV2Window();
+                snapshot.Show();
+                await snapshot.Dispatcher.InvokeAsync(
+                    snapshot.SaveSnapshot,
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                snapshot.Close();
+                Shutdown(0);
+                return;
+            }
+
+            if (e.Args.Contains("--v2-wizard-preview", StringComparer.OrdinalIgnoreCase))
+            {
+                var preview = new TestSequenceWizardV2Window();
+                MainWindow = preview;
+                preview.Show();
+                ShutdownMode = System.Windows.ShutdownMode.OnLastWindowClose;
+                return;
+            }
+
             if (e.Args.Contains("--ui-construction-smoke", StringComparer.OrdinalIgnoreCase))
             {
                 Shutdown(await UiConstructionSmokeRunner.RunAsync());

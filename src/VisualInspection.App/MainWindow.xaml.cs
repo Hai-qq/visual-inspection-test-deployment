@@ -23,7 +23,7 @@ public partial class MainWindow : Window
         DataContext = viewModel;
     }
 
-    private async void SequenceSettings_Click(object sender, RoutedEventArgs e)
+    private void SequenceSettings_Click(object sender, RoutedEventArgs e)
     {
         if (!_session.IsAdmin)
         {
@@ -31,19 +31,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        var settings = new TestSequenceSettingsWindow(
-            _bootstrap.Project,
-            _bootstrap.Store,
-            _bootstrap.PreviewFrame)
+        var settings = new TestSequenceWizardV2Window
         {
             Owner = this
         };
-        if (settings.ShowDialog() != true)
-        {
-            return;
-        }
-
-        await ReloadProjectAsync();
+        settings.ShowDialog();
     }
 
     private async void InputSourceSettings_Click(object sender, RoutedEventArgs e)
