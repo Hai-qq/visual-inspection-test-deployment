@@ -1,0 +1,20 @@
+# .NET / IDE
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+TestResults/
+artifacts/
+
+# Runtime-local content
+.env
+.env.*
+logs/
+models/
+data/
+
+# OS metadata
+Thumbs.db
+.DS_Store
