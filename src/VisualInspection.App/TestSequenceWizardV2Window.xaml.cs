@@ -14,7 +14,10 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 {
     private const double RoiReferenceWidth = 640;
     private const double RoiReferenceHeight = 480;
-    private readonly FrameworkElement[] _stepPanels;
+    private readonly FrameworkElement[] _wizardPanels;
+    private readonly FrameworkElement[] _testBlockStagePanels;
+    private readonly ObservableCollection<PoseStepPreview> _emptyPoseSteps = [];
+    private static readonly string[] TestBlockModuleTitles = ["基本信息", "检测内容", "判定条件", "触发与运行"];
     private readonly HashSet<int> _confirmedStepIndexes = [];
     private bool _wizardReady;
     private bool _isRoiDrawing;
@@ -23,6 +26,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     private Rect _roiLogicalRect = new(120, 80, 400, 340);
     private ModelPreview? _selectedModel;
     private InspectionItemPreview? _selectedInspectionItem;
+    private int _currentTestBlockStageIndex;
+    private int _nextCustomTestStepIndex = 1;
 
     public TestSequenceWizardV2Window()
     {
@@ -33,11 +38,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             new(0, "01", "项目信息", "填写项目、工位、测试序列和版本。"),
             new(1, "02", "选择图源", "选择图片文件夹、USB 摄像头或工业相机。"),
             new(2, "03", "导入模型", "建立项目模型库，可连续导入多个 ONNX / PT 模型。"),
-            new(3, "04", "编排检测项", "使用加号、减号和排序按钮，建立需要执行的检测项。"),
-            new(4, "05", "检测内容", "按检测类型填写目标区域或姿态动作顺序。"),
-            new(5, "06", "判定条件", "按检测类型填写数量规则或姿态时序条件。"),
-            new(6, "07", "运行参数", "设置毫秒延时、图源策略和发布方式。"),
-            new(7, "08", "检查完成", "汇总检查全部必填内容，再进入保存与校验。")
+            new(3, "04", "测试步设置", "把基本信息、检测内容、判定条件和触发运行参数封装成一个可调用功能。"),
+            new(4, "05", "检查完成", "汇总检查全部测试步及其触发接口，再进入保存与校验。")
         ];
 
         Models =
@@ -49,28 +51,31 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         InspectionItems =
         [
-            new(1, "风扇到位", 0, true, Models[0]),
-            new(2, "叶片缺陷", 0, true, Models[1]),
-            new(3, "拿取与放置", 1, false, Models[2])
+            new("TS-FAN-PRESENT", "风扇到位", 0, true, Models[0])
+            {
+                TriggerModeIndex = 1,
+                TriggerSignal = "PLC.Line1.FanPresent",
+                TriggerConditionIndex = 0,
+                TriggerDebounceMsText = "50"
+            },
+            new("TS-BLADE-DEFECT", "叶片缺陷", 0, true, Models[1]),
+            new("TS-PICK-PLACE", "拿取与放置", 1, false, Models[2], ["取件", "放置", "按压到位"])
         ];
 
-        PoseSteps =
-        [
-            new(1, "取件", true),
-            new(2, "放置", true),
-            new(3, "按压到位", true)
-        ];
-
-        _stepPanels =
+        _wizardPanels =
         [
             Step1Panel,
             Step2Panel,
             Step3Panel,
+            Step9Panel
+        ];
+
+        _testBlockStagePanels =
+        [
             Step4Panel,
             Step5Panel,
             Step6Panel,
-            Step8Panel,
-            Step9Panel
+            Step8Panel
         ];
 
         foreach (var model in Models)
@@ -81,11 +86,6 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         foreach (var item in InspectionItems)
         {
             TrackInspectionItem(item);
-        }
-
-        foreach (var step in PoseSteps)
-        {
-            TrackPoseStep(step);
         }
 
         DataContext = this;
@@ -106,7 +106,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     public ObservableCollection<InspectionItemPreview> InspectionItems { get; }
 
-    public ObservableCollection<PoseStepPreview> PoseSteps { get; }
+    public ObservableCollection<PoseStepPreview> PoseSteps => SelectedInspectionItem?.PoseSteps ?? _emptyPoseSteps;
 
     public ModelPreview? SelectedModel
     {
@@ -133,13 +133,24 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 return;
             }
 
+            if (_selectedInspectionItem is not null)
+            {
+                _selectedInspectionItem.RoiRect = _roiLogicalRect;
+            }
+
             _selectedInspectionItem = value;
+            _roiLogicalRect = value?.RoiRect ?? new Rect(120, 80, 400, 340);
             OnPropertyChanged();
+            OnPropertyChanged(nameof(PoseSteps));
             UpdateTypePanels();
+            UpdateTriggerEditorState();
+            UpdateRoiVisual();
         }
     }
 
     public int CurrentStepIndex { get; private set; }
+
+    public int CurrentTestBlockStageIndex => _currentTestBlockStageIndex;
 
     public static string SnapshotPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -171,6 +182,11 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         "VisualInspectionTestDeployment",
         "v2-wizard-rule-preview.png");
 
+    public static string TriggerSnapshotPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "VisualInspectionTestDeployment",
+        "v2-wizard-trigger-preview.png");
+
     public void SaveSnapshot() => SaveSnapshot(SnapshotPath);
 
     public void SavePoseSnapshot() => SaveSnapshot(PoseSnapshotPath);
@@ -182,6 +198,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     public void SaveRoiSnapshot() => SaveSnapshot(RoiSnapshotPath);
 
     public void SaveRuleSnapshot() => SaveSnapshot(RuleSnapshotPath);
+
+    public void SaveTriggerSnapshot() => SaveSnapshot(TriggerSnapshotPath);
 
     private void SaveSnapshot(string path)
     {
@@ -201,6 +219,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     public void ShowInspectionItemsStepForPreview()
     {
         NavigateTo(3);
+        ShowTestBlockStage(0);
         UpdateLayout();
     }
 
@@ -222,7 +241,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         var poseItem = InspectionItems.First(item => item.TypeIndex == 1);
         InspectionItemsList.SelectedItem = poseItem;
         SelectedInspectionItem = poseItem;
-        NavigateTo(4);
+        NavigateTo(3);
+        ShowTestBlockStage(1);
         UpdateLayout();
     }
 
@@ -231,7 +251,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         var targetItem = InspectionItems.First(item => item.TypeIndex == 0);
         InspectionItemsList.SelectedItem = targetItem;
         SelectedInspectionItem = targetItem;
-        NavigateTo(4);
+        NavigateTo(3);
+        ShowTestBlockStage(1);
         UpdateLayout();
         UpdateRoiVisual();
     }
@@ -241,9 +262,21 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         var targetItem = InspectionItems.First(item => item.TypeIndex == 0);
         InspectionItemsList.SelectedItem = targetItem;
         SelectedInspectionItem = targetItem;
-        NavigateTo(5);
+        NavigateTo(3);
+        ShowTestBlockStage(2);
         UpdateLayout();
         UpdateRuleEditorState();
+    }
+
+    public void ShowTriggerStepForPreview()
+    {
+        var externallyTriggeredItem = InspectionItems.First(item => item.TriggerModeIndex == 1);
+        InspectionItemsList.SelectedItem = externallyTriggeredItem;
+        SelectedInspectionItem = externallyTriggeredItem;
+        NavigateTo(3);
+        ShowTestBlockStage(3);
+        UpdateLayout();
+        UpdateTriggerEditorState();
     }
 
     public void ApplyRoiSelectionForSmoke(Point start, Point end)
@@ -262,6 +295,48 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         }
     }
 
+    private void TestBlockStageButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string stageText } && int.TryParse(stageText, out var stageIndex))
+        {
+            ShowTestBlockStage(stageIndex);
+        }
+    }
+
+    private void ShowTestBlockStage(int stageIndex)
+    {
+        _currentTestBlockStageIndex = Math.Clamp(stageIndex, 0, _testBlockStagePanels.Length - 1);
+        for (var index = 0; index < _testBlockStagePanels.Length; index++)
+        {
+            _testBlockStagePanels[index].Visibility = CurrentStepIndex == 3 && index == _currentTestBlockStageIndex
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        var stageButtons = new[]
+        {
+            TestBlockBasicStageButton,
+            TestBlockContentStageButton,
+            TestBlockRuleStageButton,
+            TestBlockTriggerStageButton
+        };
+        for (var index = 0; index < stageButtons.Length; index++)
+        {
+            var isCurrent = index == _currentTestBlockStageIndex;
+            stageButtons[index].Background = isCurrent ? (Brush)FindResource("GreenPaleBrush") : Brushes.White;
+            stageButtons[index].BorderBrush = (Brush)FindResource(isCurrent ? "GreenDarkBrush" : "BorderBrush");
+            stageButtons[index].Foreground = (Brush)FindResource(isCurrent ? "GreenDarkBrush" : "TextBrush");
+            stageButtons[index].FontWeight = isCurrent ? FontWeights.SemiBold : FontWeights.Normal;
+        }
+
+        if (CurrentStepIndex == 3)
+        {
+            UpdateTypePanels();
+            UpdateTriggerEditorState();
+            FooterHintText.Text = $"测试步设置 · 当前模块：{TestBlockModuleTitles[_currentTestBlockStageIndex]}；全部功能模块统一作为一个测试步校验。";
+        }
+    }
+
     private void PreviousButton_Click(object sender, RoutedEventArgs e) => NavigateTo(CurrentStepIndex - 1);
 
     private void NextButton_Click(object sender, RoutedEventArgs e)
@@ -269,6 +344,18 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         if (!IsStepValid(CurrentStepIndex, out var validationMessage))
         {
             RefreshStepCompletionStates();
+            if (CurrentStepIndex == 3 &&
+                TryGetInvalidTestBlock(out var invalidItem, out var invalidStageIndex, out _))
+            {
+                if (invalidItem is not null)
+                {
+                    InspectionItemsList.SelectedItem = invalidItem;
+                    SelectedInspectionItem = invalidItem;
+                }
+
+                ShowTestBlockStage(invalidStageIndex);
+            }
+
             FooterHintText.Text = validationMessage;
             return;
         }
@@ -288,9 +375,10 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     private void AddInspectionItem_Click(object sender, RoutedEventArgs e)
     {
         var defaultModel = Models.FirstOrDefault(model => model.TypeIndex == 0) ?? Models[0];
+        var customStepIndex = _nextCustomTestStepIndex++;
         var item = new InspectionItemPreview(
-            InspectionItems.Count + 1,
-            $"新检测项 {InspectionItems.Count + 1}",
+            $"TS-CUSTOM-{customStepIndex:00}",
+            "未命名测试步",
             0,
             true,
             defaultModel);
@@ -332,7 +420,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         if (InspectionItems.Any(item => ReferenceEquals(item.Model, SelectedModel)))
         {
-            FooterHintText.Text = "该模型已被检测项绑定；请先在第 4 步改绑，再删除模型。";
+            FooterHintText.Text = "该模型已被测试步绑定；请先在第 4 步改绑，再删除模型。";
             return;
         }
 
@@ -369,55 +457,21 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     {
         if (InspectionItems.Count <= 1)
         {
-            FooterHintText.Text = "至少保留 1 个检测项；最后一个检测项不能删除。";
+            FooterHintText.Text = "至少保留 1 个测试步；最后一个测试步不能删除。";
             return;
         }
 
         var previousIndex = InspectionItems.IndexOf(item);
         item.PropertyChanged -= ConfigurationPropertyChanged;
+        foreach (var poseStep in item.PoseSteps)
+        {
+            poseStep.PropertyChanged -= ConfigurationPropertyChanged;
+        }
+
         InspectionItems.Remove(item);
-        RenumberInspectionItems();
         InspectionItemsList.SelectedIndex = Math.Clamp(previousIndex, 0, InspectionItems.Count - 1);
         SelectedInspectionItem = InspectionItemsList.SelectedItem as InspectionItemPreview;
         RefreshStepCompletionStates();
-    }
-
-    private void MoveInspectionItemUp_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { CommandParameter: InspectionItemPreview item })
-        {
-            MoveInspectionItem(item, -1);
-        }
-    }
-
-    private void MoveInspectionItemDown_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { CommandParameter: InspectionItemPreview item })
-        {
-            MoveInspectionItem(item, 1);
-        }
-    }
-
-    private void MoveInspectionItem(InspectionItemPreview item, int offset)
-    {
-        var currentIndex = InspectionItems.IndexOf(item);
-        var destinationIndex = currentIndex + offset;
-        if (currentIndex < 0 || destinationIndex < 0 || destinationIndex >= InspectionItems.Count)
-        {
-            return;
-        }
-
-        InspectionItems.Move(currentIndex, destinationIndex);
-        RenumberInspectionItems();
-        InspectionItemsList.SelectedItem = item;
-    }
-
-    private void RenumberInspectionItems()
-    {
-        for (var index = 0; index < InspectionItems.Count; index++)
-        {
-            InspectionItems[index].Order = index + 1;
-        }
     }
 
     private void InspectionItemsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -493,6 +547,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         PoseSteps.Move(currentIndex, destinationIndex);
         RenumberPoseSteps();
     }
+
+    internal void MovePoseStepForSmoke(PoseStepPreview step, int offset) => MovePoseStep(step, offset);
 
     private void RenumberPoseSteps()
     {
@@ -574,19 +630,19 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             switch (TargetRuleMethodComboBox.SelectedIndex)
             {
                 case 0:
-                    TargetRuleSummaryText.Text = $"在{region}内统计目标“{target}”，识别数量等于 {count} 时，当前检测项通过。";
+                    TargetRuleSummaryText.Text = $"在{region}内统计目标“{target}”，识别数量等于 {count} 时，当前测试步通过。";
                     break;
                 case 1 when IsNonNegativeInteger(RangeMaximumCountTextBox.Text):
                     var maximum = int.Parse(RangeMaximumCountTextBox.Text);
                     TargetRuleSummaryText.Text = count <= maximum
-                        ? $"在{region}内统计目标“{target}”，识别数量在 {count} 到 {maximum} 之间（含边界）时，当前检测项通过。"
+                        ? $"在{region}内统计目标“{target}”，识别数量在 {count} 到 {maximum} 之间（含边界）时，当前测试步通过。"
                         : "数量范围无效：最小数量不能大于最大数量。";
                     break;
                 case 1:
                     TargetRuleSummaryText.Text = "请填写有效的最大数量，系统会在这里生成数量范围判定。";
                     break;
                 case 2:
-                    TargetRuleSummaryText.Text = $"在{region}内统计目标“{target}”，识别数量大于 {count} 时，当前检测项通过。";
+                    TargetRuleSummaryText.Text = $"在{region}内统计目标“{target}”，识别数量大于 {count} 时，当前测试步通过。";
                     break;
                 default:
                     TargetRuleSummaryText.Text = "请先选择判断方式。";
@@ -605,7 +661,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         PoseRuleSummaryText.Text =
             $"动作“{poseAction.Name}”需连续保持至少 {PoseHoldTimeTextBox.Text} ms，并在 {PoseMaxWaitTextBox.Text} ms 内完成；" +
-            "系统按画布顺序检查全部必选动作，全部满足时当前检测项通过。";
+            "系统按画布顺序检查全部必选动作，全部满足时当前测试步通过。";
     }
 
     private void RedrawRoiButton_Click(object sender, RoutedEventArgs e)
@@ -662,6 +718,11 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         if (!selectionIsLargeEnough)
         {
             _roiLogicalRect = _roiBeforeDrag;
+            if (SelectedInspectionItem is not null)
+            {
+                SelectedInspectionItem.RoiRect = _roiLogicalRect;
+            }
+
             UpdateRoiVisual();
             FooterHintText.Text = "框选范围过小，已保留上一次 ROI；请按住鼠标拖出一个矩形区域。";
         }
@@ -684,6 +745,11 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         _isRoiDrawing = false;
         _roiDragStart = null;
         _roiLogicalRect = _roiBeforeDrag;
+        if (SelectedInspectionItem is not null)
+        {
+            SelectedInspectionItem.RoiRect = _roiLogicalRect;
+        }
+
         UpdateRoiVisual();
         RefreshStepCompletionStates();
     }
@@ -695,6 +761,27 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             RefreshStepCompletionStates();
             UpdateRuleSummaries();
         }
+    }
+
+    private void TriggerMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_wizardReady)
+        {
+            UpdateTriggerEditorState();
+            RefreshStepCompletionStates();
+        }
+    }
+
+    private void UpdateTriggerEditorState()
+    {
+        if (!IsInitialized || SelectedInspectionItem is null)
+        {
+            return;
+        }
+
+        ExternalTriggerFieldsPanel.Visibility = SelectedInspectionItem.TriggerModeIndex == 1
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void ApplyRoiFromPreviewPoints(Point start, Point end)
@@ -711,6 +798,11 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             Math.Round(top / surfaceHeight * RoiReferenceHeight),
             Math.Round((right - left) / surfaceWidth * RoiReferenceWidth),
             Math.Round((bottom - top) / surfaceHeight * RoiReferenceHeight));
+        if (SelectedInspectionItem is not null)
+        {
+            SelectedInspectionItem.RoiRect = _roiLogicalRect;
+        }
+
         UpdateRoiVisual();
         RefreshStepCompletionStates();
     }
@@ -776,8 +868,14 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     private void TrackModel(ModelPreview model) => model.PropertyChanged += ConfigurationPropertyChanged;
 
-    private void TrackInspectionItem(InspectionItemPreview item) =>
+    private void TrackInspectionItem(InspectionItemPreview item)
+    {
         item.PropertyChanged += ConfigurationPropertyChanged;
+        foreach (var poseStep in item.PoseSteps)
+        {
+            TrackPoseStep(poseStep);
+        }
+    }
 
     private void TrackPoseStep(PoseStepPreview step) => step.PropertyChanged += ConfigurationPropertyChanged;
 
@@ -789,6 +887,12 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 e.PropertyName is nameof(InspectionItemPreview.TypeIndex) or nameof(InspectionItemPreview.Model))
             {
                 UpdateTypePanels();
+            }
+
+            if (ReferenceEquals(sender, SelectedInspectionItem) &&
+                e.PropertyName == nameof(InspectionItemPreview.TriggerModeIndex))
+            {
+                UpdateTriggerEditorState();
             }
 
             RefreshStepCompletionStates();
@@ -861,85 +965,16 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 return false;
 
             case 3:
-                var invalidItem = InspectionItems.FirstOrDefault(item =>
-                    string.IsNullOrWhiteSpace(item.Name) ||
-                    item.TypeIndex is < 0 or > 1 ||
-                    !Models.Contains(item.Model));
-                if (InspectionItems.Count > 0 && invalidItem is null)
+                if (!TryGetInvalidTestBlock(out _, out _, out var testBlockMessage))
                 {
                     validationMessage = string.Empty;
                     return true;
                 }
 
-                validationMessage = invalidItem is null
-                    ? "第 4 步未完成：请至少添加 1 个检测项。"
-                    : $"第 4 步未完成：请补全检测项“{invalidItem.Name}”的名称、类型和模型绑定。";
+                validationMessage = $"第 4 步未完成：{testBlockMessage}";
                 return false;
 
             case 4:
-                var targetContentReady = InspectionItems
-                    .Where(item => item.TypeIndex == 0)
-                    .All(item => item.Model.Labels.Any(label => !string.IsNullOrWhiteSpace(label)));
-                var targetRegionReady = !InspectionItems.Any(item => item.TypeIndex == 0) ||
-                                        FullImageRegionRadioButton.IsChecked == true ||
-                                        (RoiRegionRadioButton.IsChecked == true &&
-                                         _roiLogicalRect.Width > 0 &&
-                                         _roiLogicalRect.Height > 0);
-                var poseContentReady = !InspectionItems.Any(item => item.TypeIndex == 1) ||
-                                       (PoseSteps.Count > 0 && PoseSteps.All(step => !string.IsNullOrWhiteSpace(step.Name)));
-                if (targetContentReady && targetRegionReady && poseContentReady)
-                {
-                    validationMessage = string.Empty;
-                    return true;
-                }
-
-                validationMessage = "第 5 步未完成：请为目标选择有效标签，并补全姿态动作顺序。";
-                return false;
-
-            case 5:
-                if (SelectedInspectionItem?.TypeIndex == 1)
-                {
-                    if (PoseActionComboBox.SelectedIndex >= 0 &&
-                        IsNonNegativeInteger(PoseHoldTimeTextBox.Text) &&
-                        IsPositiveInteger(PoseMaxWaitTextBox.Text))
-                    {
-                        validationMessage = string.Empty;
-                        return true;
-                    }
-
-                    validationMessage = "第 6 步未完成：请选择动作，并填写有效的保持时间和最大等待时间。";
-                    return false;
-                }
-
-                var targetRuleReady = TargetRuleTargetComboBox.SelectedIndex >= 0 &&
-                                      TargetRuleMethodComboBox.SelectedIndex >= 0 &&
-                                      IsNonNegativeInteger(ExpectedCountTextBox.Text);
-                if (targetRuleReady && TargetRuleMethodComboBox.SelectedIndex == 1)
-                {
-                    targetRuleReady = IsNonNegativeInteger(RangeMaximumCountTextBox.Text) &&
-                                      int.Parse(ExpectedCountTextBox.Text) <= int.Parse(RangeMaximumCountTextBox.Text);
-                }
-
-                if (targetRuleReady)
-                {
-                    validationMessage = string.Empty;
-                    return true;
-                }
-
-                validationMessage = "第 6 步未完成：请选择检测目标和判断方式，并填写有效且顺序正确的数量条件。";
-                return false;
-
-            case 6:
-                if (IsNonNegativeInteger(DefaultDelayTextBox.Text) && RuntimeSourceComboBox.SelectedIndex >= 0)
-                {
-                    validationMessage = string.Empty;
-                    return true;
-                }
-
-                validationMessage = "第 7 步未完成：请填写非负延时并选择运行时图源策略。";
-                return false;
-
-            case 7:
                 var incompleteSteps = Steps
                     .Take(Steps.Count - 1)
                     .Where(step => !step.IsCompleted)
@@ -958,6 +993,111 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 validationMessage = "当前步骤无效。";
                 return false;
         }
+    }
+
+    private bool TryGetInvalidTestBlock(
+        out InspectionItemPreview? invalidItem,
+        out int invalidStageIndex,
+        out string validationMessage)
+    {
+        invalidItem = null;
+        invalidStageIndex = 0;
+        if (InspectionItems.Count == 0)
+        {
+            validationMessage = "请至少添加 1 个测试步。";
+            return true;
+        }
+
+        foreach (var item in InspectionItems)
+        {
+            if (string.IsNullOrWhiteSpace(item.Name) ||
+                item.TypeIndex is < 0 or > 1 ||
+                !Models.Contains(item.Model))
+            {
+                invalidItem = item;
+                validationMessage = $"请补全测试步“{item.Name}”的名称、类型和模型绑定。";
+                return true;
+            }
+
+            if (item.TypeIndex == 0)
+            {
+                if (string.IsNullOrWhiteSpace(item.TargetLabel) || !item.Model.Labels.Contains(item.TargetLabel))
+                {
+                    invalidItem = item;
+                    invalidStageIndex = 1;
+                    validationMessage = $"请为测试步“{item.Name}”选择有效的模型标签。";
+                    return true;
+                }
+
+                if (item.UseRoi && (item.RoiRect.Width <= 0 || item.RoiRect.Height <= 0))
+                {
+                    invalidItem = item;
+                    invalidStageIndex = 1;
+                    validationMessage = $"请为测试步“{item.Name}”框选有效 ROI，或改为检测整张图片。";
+                    return true;
+                }
+
+                var targetRuleReady = item.RuleMethodIndex is >= 0 and <= 2 &&
+                                      IsNonNegativeInteger(item.ExpectedCountText);
+                if (targetRuleReady && item.RuleMethodIndex == 1)
+                {
+                    targetRuleReady = IsNonNegativeInteger(item.RangeMaximumCountText) &&
+                                      int.Parse(item.ExpectedCountText) <= int.Parse(item.RangeMaximumCountText);
+                }
+
+                if (!targetRuleReady)
+                {
+                    invalidItem = item;
+                    invalidStageIndex = 2;
+                    validationMessage = $"请补全测试步“{item.Name}”的数量判定条件，并确保最小值不大于最大值。";
+                    return true;
+                }
+            }
+            else
+            {
+                if (item.PoseSteps.Count == 0 || item.PoseSteps.Any(step => string.IsNullOrWhiteSpace(step.Name)))
+                {
+                    invalidItem = item;
+                    invalidStageIndex = 1;
+                    validationMessage = $"请补全测试步“{item.Name}”的姿态动作顺序。";
+                    return true;
+                }
+
+                if (item.PoseActionIndex < 0 ||
+                    item.PoseActionIndex >= item.PoseSteps.Count ||
+                    !IsNonNegativeInteger(item.PoseHoldTimeText) ||
+                    !IsPositiveInteger(item.PoseMaxWaitText))
+                {
+                    invalidItem = item;
+                    invalidStageIndex = 2;
+                    validationMessage = $"请为测试步“{item.Name}”选择动作，并填写有效的保持时间和最大等待时间。";
+                    return true;
+                }
+            }
+
+            var triggerReady = item.TriggerModeIndex is >= 0 and <= 2 &&
+                               IsNonNegativeInteger(item.TriggerDebounceMsText) &&
+                               IsNonNegativeInteger(item.TriggerDelayMsText) &&
+                               IsPositiveInteger(item.FunctionTimeoutMsText) &&
+                               item.RuntimeSourceIndex is >= 0 and <= 2;
+            if (item.TriggerModeIndex == 1)
+            {
+                triggerReady = triggerReady &&
+                               !string.IsNullOrWhiteSpace(item.TriggerSignal) &&
+                               item.TriggerConditionIndex is >= 0 and <= 3;
+            }
+
+            if (!triggerReady)
+            {
+                invalidItem = item;
+                invalidStageIndex = 3;
+                validationMessage = $"请补全测试步“{item.Name}”的触发点位、信号条件、去抖、延时、超时和图源策略。";
+                return true;
+            }
+        }
+
+        validationMessage = string.Empty;
+        return false;
     }
 
     private static bool HasText(TextBox textBox) => !string.IsNullOrWhiteSpace(textBox.Text);
@@ -981,6 +1121,11 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             _isRoiDrawing = false;
             _roiDragStart = null;
             _roiLogicalRect = _roiBeforeDrag;
+            if (SelectedInspectionItem is not null)
+            {
+                SelectedInspectionItem.RoiRect = _roiLogicalRect;
+            }
+
             RoiPreviewSurface.ReleaseMouseCapture();
             UpdateRoiVisual();
             RefreshStepCompletionStates();
@@ -1018,9 +1163,29 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         CurrentStepIndex = index;
         RefreshStepCompletionStates();
 
-        for (var panelIndex = 0; panelIndex < _stepPanels.Length; panelIndex++)
+        foreach (var panel in _wizardPanels)
         {
-            _stepPanels[panelIndex].Visibility = panelIndex == index ? Visibility.Visible : Visibility.Collapsed;
+            panel.Visibility = Visibility.Collapsed;
+        }
+
+        foreach (var panel in _testBlockStagePanels)
+        {
+            panel.Visibility = Visibility.Collapsed;
+        }
+
+        TestBlockStageBar.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
+        if (index <= 2)
+        {
+            _wizardPanels[index].Visibility = Visibility.Visible;
+        }
+        else if (index == 3)
+        {
+            ShowTestBlockStage(_currentTestBlockStageIndex);
+        }
+        else
+        {
+            _wizardPanels[3].Visibility = Visibility.Visible;
+            UpdateReviewSummary();
         }
 
         foreach (var step in Steps)
@@ -1042,10 +1207,25 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             ? "前端确认阶段：点击确认只显示完成状态，不会保存配置。"
             : $"第 {index + 1} / {Steps.Count} 步 · 红色 * 为必填项，悬停信息图标可查看说明。";
 
-        if (index is 4 or 5)
+        if (index == 3)
         {
             UpdateTypePanels();
+            UpdateTriggerEditorState();
         }
+    }
+
+    private void UpdateReviewSummary()
+    {
+        var requiredCount = InspectionItems.Count(item => item.IsRequired);
+        var targetCount = InspectionItems.Count(item => item.TypeIndex == 0);
+        var poseCount = InspectionItems.Count(item => item.TypeIndex == 1);
+        var sequentialCount = InspectionItems.Count(item => item.TriggerModeIndex == 0);
+        var externalCount = InspectionItems.Count(item => item.TriggerModeIndex == 1);
+        var manualCount = InspectionItems.Count(item => item.TriggerModeIndex == 2);
+
+        ReviewTestBlocksSummaryText.Text = $"{InspectionItems.Count} 个 · {requiredCount} 个必选";
+        ReviewTriggerSummaryText.Text = $"序列调用 {sequentialCount} · 外部 {externalCount} · 手动 {manualCount}";
+        ReviewRuntimeSummaryText.Text = $"目标 {targetCount} · 姿态 {poseCount} · 参数独立";
     }
 
     private void CompletePrototype()
@@ -1088,10 +1268,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             0 => "填写项目信息",
             1 => "选择图片来源",
             2 => "导入模型与标签",
-            3 => "编排检测项顺序",
-            4 => "填写检测内容",
-            5 => "设置通过条件",
-            6 => "设置运行参数",
+            3 => "设置测试步",
             _ => "检查并完成"
         };
 
@@ -1123,34 +1300,50 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     public sealed class InspectionItemPreview : INotifyPropertyChanged
     {
-        private int _order;
+        private readonly string _functionCode;
         private string _name;
         private int _typeIndex;
         private bool _isRequired;
         private ModelPreview _model;
+        private string _targetLabel;
+        private bool _useRoi = true;
+        private Rect _roiRect = new(120, 80, 400, 340);
+        private int _ruleMethodIndex;
+        private string _expectedCountText = "1";
+        private string _rangeMaximumCountText = "2";
+        private int _poseActionIndex;
+        private string _poseHoldTimeText = "300";
+        private string _poseMaxWaitText = "5000";
+        private int _triggerModeIndex;
+        private string _triggerSignal = string.Empty;
+        private int _triggerConditionIndex;
+        private string _triggerDebounceMsText = "50";
+        private string _triggerDelayMsText = "200";
+        private string _functionTimeoutMsText = "5000";
+        private int _runtimeSourceIndex;
 
-        public InspectionItemPreview(int order, string name, int typeIndex, bool isRequired, ModelPreview model)
+        public InspectionItemPreview(
+            string functionCode,
+            string name,
+            int typeIndex,
+            bool isRequired,
+            ModelPreview model,
+            IEnumerable<string>? poseStepNames = null)
         {
-            _order = order;
+            _functionCode = functionCode;
             _name = name;
             _typeIndex = typeIndex;
             _isRequired = isRequired;
             _model = model;
+            _targetLabel = model.Labels.FirstOrDefault() ?? string.Empty;
+            var names = (poseStepNames ?? ["动作 1"]).ToArray();
+            PoseSteps = new ObservableCollection<PoseStepPreview>(
+                names.Select((stepName, index) => new PoseStepPreview(index + 1, stepName, true)));
         }
 
-        public int Order
-        {
-            get => _order;
-            set
-            {
-                if (SetField(ref _order, value))
-                {
-                    OnPropertyChanged(nameof(OrderText));
-                }
-            }
-        }
+        public string FunctionCode => _functionCode;
 
-        public string OrderText => Order.ToString("00");
+        public ObservableCollection<PoseStepPreview> PoseSteps { get; }
 
         public string Name
         {
@@ -1189,7 +1382,212 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         public ModelPreview Model
         {
             get => _model;
-            set => SetField(ref _model, value);
+            set
+            {
+                if (SetField(ref _model, value) && !value.Labels.Contains(TargetLabel))
+                {
+                    TargetLabel = value.Labels.FirstOrDefault() ?? string.Empty;
+                }
+            }
+        }
+
+        public string TargetLabel
+        {
+            get => _targetLabel;
+            set => SetField(ref _targetLabel, value ?? string.Empty);
+        }
+
+        public bool UseRoi
+        {
+            get => _useRoi;
+            set
+            {
+                if (SetField(ref _useRoi, value))
+                {
+                    OnPropertyChanged(nameof(UseFullImage));
+                }
+            }
+        }
+
+        public bool UseFullImage
+        {
+            get => !UseRoi;
+            set
+            {
+                if (value)
+                {
+                    UseRoi = false;
+                }
+            }
+        }
+
+        public Rect RoiRect
+        {
+            get => _roiRect;
+            set => SetField(ref _roiRect, value);
+        }
+
+        public int RuleMethodIndex
+        {
+            get => _ruleMethodIndex;
+            set => SetField(ref _ruleMethodIndex, value);
+        }
+
+        public string ExpectedCountText
+        {
+            get => _expectedCountText;
+            set => SetField(ref _expectedCountText, value ?? string.Empty);
+        }
+
+        public string RangeMaximumCountText
+        {
+            get => _rangeMaximumCountText;
+            set => SetField(ref _rangeMaximumCountText, value ?? string.Empty);
+        }
+
+        public int PoseActionIndex
+        {
+            get => _poseActionIndex;
+            set => SetField(ref _poseActionIndex, value);
+        }
+
+        public string PoseHoldTimeText
+        {
+            get => _poseHoldTimeText;
+            set => SetField(ref _poseHoldTimeText, value ?? string.Empty);
+        }
+
+        public string PoseMaxWaitText
+        {
+            get => _poseMaxWaitText;
+            set => SetField(ref _poseMaxWaitText, value ?? string.Empty);
+        }
+
+        public int TriggerModeIndex
+        {
+            get => _triggerModeIndex;
+            set
+            {
+                if (SetField(ref _triggerModeIndex, value))
+                {
+                    NotifyFunctionContractChanged();
+                }
+            }
+        }
+
+        public string TriggerSignal
+        {
+            get => _triggerSignal;
+            set
+            {
+                if (SetField(ref _triggerSignal, value ?? string.Empty))
+                {
+                    NotifyFunctionContractChanged();
+                }
+            }
+        }
+
+        public int TriggerConditionIndex
+        {
+            get => _triggerConditionIndex;
+            set
+            {
+                if (SetField(ref _triggerConditionIndex, value))
+                {
+                    NotifyFunctionContractChanged();
+                }
+            }
+        }
+
+        public string TriggerDebounceMsText
+        {
+            get => _triggerDebounceMsText;
+            set
+            {
+                if (SetField(ref _triggerDebounceMsText, value ?? string.Empty))
+                {
+                    NotifyFunctionContractChanged();
+                }
+            }
+        }
+
+        public string TriggerDelayMsText
+        {
+            get => _triggerDelayMsText;
+            set
+            {
+                if (SetField(ref _triggerDelayMsText, value ?? string.Empty))
+                {
+                    NotifyFunctionContractChanged();
+                }
+            }
+        }
+
+        public string FunctionTimeoutMsText
+        {
+            get => _functionTimeoutMsText;
+            set
+            {
+                if (SetField(ref _functionTimeoutMsText, value ?? string.Empty))
+                {
+                    NotifyFunctionContractChanged();
+                }
+            }
+        }
+
+        public int RuntimeSourceIndex
+        {
+            get => _runtimeSourceIndex;
+            set
+            {
+                if (SetField(ref _runtimeSourceIndex, value))
+                {
+                    NotifyFunctionContractChanged();
+                }
+            }
+        }
+
+        public string TriggerModeLabel => TriggerModeIndex switch
+        {
+            1 => "外部信号",
+            2 => "手动调用",
+            _ => "序列调用"
+        };
+
+        public string TriggerConditionLabel => TriggerConditionIndex switch
+        {
+            1 => "下降沿",
+            2 => "高电平",
+            3 => "低电平",
+            _ => "上升沿"
+        };
+
+        public string RuntimeSourceLabel => RuntimeSourceIndex switch
+        {
+            1 => "外部上下文图像",
+            2 => "调试时选择图源",
+            _ => "继承序列图源"
+        };
+
+        public string TriggerSummaryLabel => TriggerModeIndex == 1 && !string.IsNullOrWhiteSpace(TriggerSignal)
+            ? $"{TriggerSignal} · {TriggerConditionLabel}"
+            : TriggerModeLabel;
+
+        public string FunctionContractSummary
+        {
+            get
+            {
+                var invocation = TriggerModeIndex switch
+                {
+                    1 when string.IsNullOrWhiteSpace(TriggerSignal) => "等待外部信号（点位待填写）",
+                    1 => $"等待 {TriggerSignal} 的{TriggerConditionLabel}",
+                    2 => "由操作员或调试工具手动调用",
+                    _ => "由测试序列调用"
+                };
+                var debounce = TriggerModeIndex == 1 ? $"，去抖 {TriggerDebounceMsText} ms" : string.Empty;
+                return $"{FunctionCode} · {invocation}{debounce}，触发后延时 {TriggerDelayMsText} ms，" +
+                       $"函数超时 {FunctionTimeoutMsText} ms，{RuntimeSourceLabel}。";
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -1204,6 +1602,15 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             field = value;
             OnPropertyChanged(propertyName);
             return true;
+        }
+
+        private void NotifyFunctionContractChanged()
+        {
+            OnPropertyChanged(nameof(TriggerModeLabel));
+            OnPropertyChanged(nameof(TriggerConditionLabel));
+            OnPropertyChanged(nameof(RuntimeSourceLabel));
+            OnPropertyChanged(nameof(TriggerSummaryLabel));
+            OnPropertyChanged(nameof(FunctionContractSummary));
         }
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
