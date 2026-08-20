@@ -33,7 +33,10 @@ public partial class App : Application
             var captureRule = e.Args.Contains(
                 "--v2-wizard-rule-snapshot",
                 StringComparer.OrdinalIgnoreCase);
-            if (captureInspectionItems || capturePoseContent || captureInputSource || captureModels || captureRoi || captureRule ||
+            var captureTrigger = e.Args.Contains(
+                "--v2-wizard-trigger-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            if (captureInspectionItems || capturePoseContent || captureInputSource || captureModels || captureRoi || captureRule || captureTrigger ||
                 e.Args.Contains("--v2-wizard-snapshot", StringComparer.OrdinalIgnoreCase))
             {
                 var snapshot = new TestSequenceWizardV2Window();
@@ -62,6 +65,10 @@ public partial class App : Application
                 {
                     snapshot.ShowTargetRuleStepForPreview();
                 }
+                else if (captureTrigger)
+                {
+                    snapshot.ShowTriggerStepForPreview();
+                }
 
                 await snapshot.Dispatcher.InvokeAsync(
                     capturePoseContent
@@ -74,7 +81,9 @@ public partial class App : Application
                                     ? snapshot.SaveRoiSnapshot
                                     : captureRule
                                         ? snapshot.SaveRuleSnapshot
-                                    : snapshot.SaveSnapshot,
+                                        : captureTrigger
+                                            ? snapshot.SaveTriggerSnapshot
+                                            : snapshot.SaveSnapshot,
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 snapshot.Close();
                 Shutdown(0);
@@ -93,7 +102,10 @@ public partial class App : Application
             var previewRule = e.Args.Contains(
                 "--v2-wizard-rule-preview",
                 StringComparer.OrdinalIgnoreCase);
-            if (previewInputSource || previewModels || previewRoi || previewRule ||
+            var previewTrigger = e.Args.Contains(
+                "--v2-wizard-trigger-preview",
+                StringComparer.OrdinalIgnoreCase);
+            if (previewInputSource || previewModels || previewRoi || previewRule || previewTrigger ||
                 e.Args.Contains("--v2-wizard-preview", StringComparer.OrdinalIgnoreCase))
             {
                 var preview = new TestSequenceWizardV2Window();
@@ -114,6 +126,10 @@ public partial class App : Application
                 else if (previewRule)
                 {
                     preview.ShowTargetRuleStepForPreview();
+                }
+                else if (previewTrigger)
+                {
+                    preview.ShowTriggerStepForPreview();
                 }
 
                 ShutdownMode = System.Windows.ShutdownMode.OnLastWindowClose;

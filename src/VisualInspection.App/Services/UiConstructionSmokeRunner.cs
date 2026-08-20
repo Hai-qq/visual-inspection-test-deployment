@@ -69,6 +69,23 @@ public static class UiConstructionSmokeRunner
             wizardV2Window.Show();
             wizardV2Window.UpdateLayout();
             wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            var defaultWizardWidth = wizardV2Window.Width;
+            wizardV2Window.Width = wizardV2Window.MinWidth;
+            wizardV2Window.UpdateLayout();
+            var stepsOrigin = wizardV2Window.WizardStepsItemsControl.TranslatePoint(
+                new Point(0, 0),
+                wizardV2Window.WizardStepsScrollViewer);
+            var stepsLeftGap = stepsOrigin.X;
+            var stepsRightGap = wizardV2Window.WizardStepsScrollViewer.ViewportWidth -
+                stepsOrigin.X - wizardV2Window.WizardStepsItemsControl.ActualWidth;
+            if (Math.Abs(stepsLeftGap - stepsRightGap) > 1.5)
+            {
+                throw new InvalidOperationException("V2 顶部五步导航没有作为一个整体居中。");
+            }
+
+            wizardV2Window.Width = defaultWizardWidth;
+            wizardV2Window.UpdateLayout();
+
             wizardV2Window.ShowModelsStepForPreview();
             if (wizardV2Window.CurrentStepIndex != 2 || wizardV2Window.Steps.Take(2).Any(step => step.IsCompleted))
             {
@@ -172,16 +189,62 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("V2 向导顺序导航冒烟失败。");
             }
 
+            var testBlockModuleButtons = new[]
+            {
+                wizardV2Window.TestBlockBasicStageButton,
+                wizardV2Window.TestBlockContentStageButton,
+                wizardV2Window.TestBlockRuleStageButton,
+                wizardV2Window.TestBlockTriggerStageButton
+            };
+            if (testBlockModuleButtons.Any(button =>
+                    button.Content is not string label ||
+                    string.IsNullOrWhiteSpace(label) ||
+                    char.IsDigit(label[0])))
+            {
+                throw new InvalidOperationException("V2 测试步功能页签不应显示二级步骤编号。");
+            }
+
+            wizardV2Window.Width = wizardV2Window.MinWidth;
+            wizardV2Window.UpdateLayout();
+            foreach (var button in testBlockModuleButtons)
+            {
+                var buttonOrigin = button.TranslatePoint(new Point(0, 0), wizardV2Window.TestBlockStageBar);
+                if (buttonOrigin.X < 0 ||
+                    buttonOrigin.X + button.ActualWidth > wizardV2Window.TestBlockStageBar.ActualWidth + 0.5)
+                {
+                    throw new InvalidOperationException("V2 测试步功能页签超出编辑器边框。");
+                }
+            }
+
+            wizardV2Window.Width = defaultWizardWidth;
+            wizardV2Window.UpdateLayout();
+
+            wizardV2Window.TestBlockContentStageButton.RaiseEvent(
+                new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.CurrentTestBlockStageIndex != 1 ||
+                wizardV2Window.Step5Panel.Visibility != Visibility.Visible)
+            {
+                throw new InvalidOperationException("V2 测试步功能页签导航冒烟失败。");
+            }
+
+            wizardV2Window.TestBlockBasicStageButton.RaiseEvent(
+                new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+
             if (wizardV2Window.InspectionModelComboBox.Items.Count != originalModelCount)
             {
-                throw new InvalidOperationException("V2 检测项动态绑定项目模型库冒烟失败。");
+                throw new InvalidOperationException("V2 测试步动态绑定项目模型库冒烟失败。");
             }
 
             var originalInspectionItemCount = wizardV2Window.InspectionItemsList.Items.Count;
+            var originalFunctionCodes = wizardV2Window.InspectionItems
+                .Select(item => item.FunctionCode)
+                .ToArray();
             wizardV2Window.AddInspectionItemButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            if (wizardV2Window.InspectionItemsList.Items.Count != originalInspectionItemCount + 1)
+            if (wizardV2Window.InspectionItemsList.Items.Count != originalInspectionItemCount + 1 ||
+                wizardV2Window.SelectedInspectionItem is not { FunctionCode: var addedFunctionCode } ||
+                originalFunctionCodes.Contains(addedFunctionCode, StringComparer.Ordinal))
             {
-                throw new InvalidOperationException("V2 检测项加号交互冒烟失败。");
+                throw new InvalidOperationException("V2 测试步加号与稳定函数标识交互冒烟失败。");
             }
 
             wizardV2Window.InspectionTypeComboBox.SelectedIndex = 1;
@@ -193,9 +256,11 @@ public static class UiConstructionSmokeRunner
             }
 
             wizardV2Window.RemoveSelectedInspectionItemButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            if (wizardV2Window.InspectionItemsList.Items.Count != originalInspectionItemCount)
+            if (wizardV2Window.InspectionItemsList.Items.Count != originalInspectionItemCount ||
+                !wizardV2Window.InspectionItems.Select(item => item.FunctionCode).SequenceEqual(originalFunctionCodes) ||
+                !wizardV2Window.InspectionItemsSemanticsText.Text.Contains("不设执行顺序", StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("V2 检测项减号交互冒烟失败。");
+                throw new InvalidOperationException("V2 测试步无序集合的加减交互冒烟失败。");
             }
 
             if (wizardV2Window.AddInspectionItemButton.ToolTip is null ||
@@ -204,14 +269,39 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("V2 加减操作 ToolTip 冒烟失败。");
             }
 
-            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            var poseContentItem = wizardV2Window.InspectionItems.First(item => item.TypeIndex == 1);
+            wizardV2Window.InspectionItemsList.SelectedItem = poseContentItem;
+            wizardV2Window.TestBlockContentStageButton.RaiseEvent(
+                new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+            var originalPoseStepNames = poseContentItem.PoseSteps.Select(step => step.Name).ToArray();
+            var firstPoseStep = poseContentItem.PoseSteps[0];
+            wizardV2Window.MovePoseStepForSmoke(firstPoseStep, 1);
+            if (poseContentItem.PoseSteps[1] != firstPoseStep ||
+                poseContentItem.PoseSteps.Select(step => step.Order).Where((order, index) => order != index + 1).Any() ||
+                wizardV2Window.PoseContentPanel.Visibility != Visibility.Visible ||
+                !wizardV2Window.PoseOrderHeadingText.Text.Contains("执行顺序", StringComparison.Ordinal) ||
+                wizardV2Window.AddPoseStepButton.ToolTip is null)
+            {
+                throw new InvalidOperationException("V2 姿态动作排序与连续编号冒烟失败。");
+            }
+
+            wizardV2Window.MovePoseStepForSmoke(firstPoseStep, -1);
+            if (!poseContentItem.PoseSteps.Select(step => step.Name).SequenceEqual(originalPoseStepNames))
+            {
+                throw new InvalidOperationException("V2 姿态动作排序恢复冒烟失败。");
+            }
+
             wizardV2Window.ShowTargetContentStepForPreview();
             wizardV2Window.UpdateLayout();
             wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            if (wizardV2Window.RoiPreviewSurface.ActualWidth <= 0 ||
+            if (wizardV2Window.CurrentStepIndex != 3 ||
+                wizardV2Window.CurrentTestBlockStageIndex != 1 ||
+                wizardV2Window.Steps.Count != 5 ||
+                wizardV2Window.RoiPreviewSurface.ActualWidth <= 0 ||
                 wizardV2Window.RoiPreviewSurface.ActualHeight <= 0)
             {
-                throw new InvalidOperationException("V2 ROI 预览区域未完成布局。");
+                throw new InvalidOperationException("V2 五步向导的测试步检测内容模块未完成布局。");
             }
 
             var originalRoi = wizardV2Window.RoiLogicalRect;
@@ -238,13 +328,14 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("V2 ROI 重新框选提示冒烟失败。");
             }
 
-            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            wizardV2Window.ShowTargetRuleStepForPreview();
             wizardV2Window.UpdateLayout();
             wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
-            if (wizardV2Window.CurrentStepIndex != 5 ||
+            if (wizardV2Window.CurrentStepIndex != 3 ||
+                wizardV2Window.CurrentTestBlockStageIndex != 2 ||
                 !wizardV2Window.TargetRuleSummaryText.Text.Contains("X1 96", StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("V2 判定条件没有继承当前 ROI 冒烟失败。");
+                throw new InvalidOperationException("V2 测试步判定条件模块没有继承当前 ROI 冒烟失败。");
             }
 
             wizardV2Window.TargetRuleMethodComboBox.SelectedIndex = 2;
@@ -267,9 +358,11 @@ public static class UiConstructionSmokeRunner
             }
 
             wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            if (wizardV2Window.CurrentStepIndex != 5 || wizardV2Window.Steps[5].IsCompleted)
+            if (wizardV2Window.CurrentStepIndex != 3 ||
+                wizardV2Window.CurrentTestBlockStageIndex != 2 ||
+                wizardV2Window.Steps[3].IsCompleted)
             {
-                throw new InvalidOperationException("V2 无效数量范围未阻止下一步。");
+                throw new InvalidOperationException("V2 测试步内的无效数量范围未阻止整体完成。");
             }
 
             wizardV2Window.ExpectedCountTextBox.Text = "1";
@@ -296,17 +389,65 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("V2 数量范围判定摘要实时联动冒烟失败。");
             }
 
-            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            if (wizardV2Window.CurrentStepIndex != 7)
+            wizardV2Window.ShowTriggerStepForPreview();
+            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+            if (wizardV2Window.CurrentStepIndex != 3 ||
+                wizardV2Window.CurrentTestBlockStageIndex != 3 ||
+                wizardV2Window.ExternalTriggerFieldsPanel.Visibility != Visibility.Visible ||
+                !wizardV2Window.FunctionContractSummaryText.Text.Contains("PLC.Line1.FanPresent", StringComparison.Ordinal) ||
+                !wizardV2Window.FunctionContractSummaryText.Text.Contains("上升沿", StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("V2 八步向导最终页导航冒烟失败。");
+                throw new InvalidOperationException("V2 测试步外部触发接口与函数摘要冒烟失败。");
             }
 
-            if (!wizardV2Window.Steps.Take(7).All(step => step.IsCompleted) ||
-                wizardV2Window.Steps[7].IsCompleted)
+            wizardV2Window.TriggerSignalTextBox.Text = string.Empty;
+            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.CurrentStepIndex != 3 ||
+                wizardV2Window.CurrentTestBlockStageIndex != 3 ||
+                wizardV2Window.Steps[3].IsCompleted)
             {
-                throw new InvalidOperationException("V2 最终确认前的步骤完成状态冒烟失败。");
+                throw new InvalidOperationException("V2 外部触发点位为空时没有阻止测试步整体完成。");
+            }
+
+            wizardV2Window.TriggerSignalTextBox.Text = "PLC.Line1.FanPresent";
+            wizardV2Window.TriggerConditionComboBox.SelectedIndex = 1;
+            wizardV2Window.TriggerDebounceTextBox.Text = "80";
+            wizardV2Window.DefaultDelayTextBox.Text = "250";
+            wizardV2Window.FunctionTimeoutTextBox.Text = "7000";
+            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+            if (!wizardV2Window.FunctionContractSummaryText.Text.Contains("下降沿", StringComparison.Ordinal) ||
+                !wizardV2Window.FunctionContractSummaryText.Text.Contains("去抖 80 ms", StringComparison.Ordinal) ||
+                !wizardV2Window.FunctionContractSummaryText.Text.Contains("延时 250 ms", StringComparison.Ordinal) ||
+                !wizardV2Window.FunctionContractSummaryText.Text.Contains("超时 7000 ms", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("V2 测试步触发运行参数没有实时更新函数摘要。");
+            }
+
+            var sequentialItem = wizardV2Window.InspectionItems.First(item => item.TriggerModeIndex == 0);
+            wizardV2Window.InspectionItemsList.SelectedItem = sequentialItem;
+            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+            if (wizardV2Window.ExternalTriggerFieldsPanel.Visibility != Visibility.Collapsed ||
+                wizardV2Window.DefaultDelayTextBox.Text != "200")
+            {
+                throw new InvalidOperationException("V2 切换测试步后没有恢复该功能独立的触发运行参数。");
+            }
+
+            var externalItem = wizardV2Window.InspectionItems.First(item => item.TriggerModeIndex == 1);
+            wizardV2Window.InspectionItemsList.SelectedItem = externalItem;
+            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+            if (wizardV2Window.ExternalTriggerFieldsPanel.Visibility != Visibility.Visible ||
+                wizardV2Window.DefaultDelayTextBox.Text != "250")
+            {
+                throw new InvalidOperationException("V2 返回外部触发测试步后独立运行参数未保留。");
+            }
+
+            wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.CurrentStepIndex != 4 ||
+                !wizardV2Window.Steps.Take(4).All(step => step.IsCompleted) ||
+                wizardV2Window.Steps[4].IsCompleted ||
+                !wizardV2Window.ReviewTriggerSummaryText.Text.Contains("外部 1", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("V2 五步向导最终页及测试步触发汇总冒烟失败。");
             }
 
             wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -323,7 +464,7 @@ public static class UiConstructionSmokeRunner
             Directory.CreateDirectory(Path.GetDirectoryName(ReceiptPath)!);
             await File.WriteAllTextAsync(
                 ReceiptPath,
-                $"通过{Environment.NewLine}{DateTimeOffset.UtcNow:O}{Environment.NewLine}登录窗口 + 主窗口 + 图像源设置窗口 + 经典测试序列设置窗口 + 普通检测项新增/删除 + V2 八步向导跳步不补绿/必填失效退绿/未完成拦截/前后导航/USB 图源卡绿色选中/多模型库加减与类型切换/检测项动态模型绑定/检测项加减/姿态类型联动/ROI 拖拽框选与坐标回填/目标与姿态判定摘要实时联动/数量范围校验/ToolTip/最终确认",
+                $"通过{Environment.NewLine}{DateTimeOffset.UtcNow:O}{Environment.NewLine}登录窗口 + 主窗口 + 图像源设置窗口 + 经典测试序列设置窗口 + 普通检测项新增/删除 + V2 五步导航整体居中/跳步不补绿/必填失效退绿/未完成拦截/前后导航/USB 图源卡绿色选中/多模型库加减与类型切换/测试步动态模型绑定与无序加减/稳定函数标识/无编号功能页签整合且不越框/姿态动作显式排序与连续编号/ROI 拖拽框选与坐标回填/目标与姿态判定摘要实时联动/数量范围校验/PLC-IO-传感器外部触发契约/去抖-延时-超时校验/ToolTip/最终确认",
                 cancellationToken);
             return 0;
         }
