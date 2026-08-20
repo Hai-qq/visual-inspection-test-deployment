@@ -4,6 +4,73 @@
 
 开发语言固定为 **C#**，使用 .NET 8、WPF 和 MVVM。产品主体不得改用 Python、C++、JavaScript/TypeScript 或其他语言；PowerShell 仅承担构建与验收编排，厂商原生运行库必须通过 C# 适配器隔离。
 
+## 当前分支状态
+
+- `v1.0.0` 标签冻结了旧版设置界面及其完整功能基线；该标签中的应用程序集版本仍为 v0.6.0。
+- 当前 `agent/v2-wizard-ui` 分支提供“测试序列设置 V2”前端原型：顶部将 `项目信息 → 选择图源 → 导入模型 → 测试步设置 → 检查完成` 5 个步骤作为一组整体居中；第 4 步是一个统一的测试步工作区，内部使用不编号的“基本信息、检测内容、判定条件、触发与运行”功能页签编辑同一个功能块。
+- V2 步骤卡只有在本页必填校验通过并点击“下一步”确认后才显示“已完成”绿色；直接点击后续步骤不会把跳过的中间步骤补绿，已完成页的必填内容被清空后也会立即取消完成状态。
+- V2 的“导入模型”使用项目模型库：左侧可连续添加、选择和删除多个模型，右侧为当前模型独立设置名称、任务类型、ONNX/PT 文件及标签/动作名称来源；测试步的模型下拉框直接读取同一模型库，不再使用写死选项。已被测试步绑定的模型会提示先改绑再删除。
+- V2“测试步设置”左侧是无序的独立函数集合，只提供选择、新增和删除，不显示顺序号或测试步上移/下移；右侧四个不编号的功能页签共同编辑当前测试步，不再形成一套 `1–4` 二级向导。目标检测与姿态动作共用同一入口，ROI、标签、数量规则、姿态时序和运行参数均按测试步独立保留，切换测试步不会串值；姿态测试步内部的动作仍按 `01、02、03` 明确排序，并可前移或后移。
+- V2 的图片文件夹、USB 摄像头和工业相机图源卡均可整卡点击；当前选中卡使用浅绿背景、深绿边框和选中图标，不保留固定在初始图源上的假高亮。
+- V2“检测内容”页签的 ROI 预览区支持真实鼠标拖拽框选：拖动时矩形和基于 `640 × 480` 参考画布的 `X1/Y1/X2/Y2` 实时同步，“重新框选区域”会给出操作提示；过小框选和 Esc 取消会保留当前测试步上一次有效 ROI。
+- V2“判定条件”页签的最终判定摘要实时跟随当前测试步的模型标签、全图/ROI、ROI 坐标、数量等于/范围/大于及姿态保持/等待时间；数量范围最小值大于最大值时会阻止整个测试步完成。
+- V2“触发与运行”页签把每个测试步定义为可调用函数：可选择由测试序列调用、外部 PLC/IO/传感器信号或手动调试调用，并配置稳定信号点位、上升沿/下降沿/高低电平、去抖、触发后延时、函数超时和运行时图源。函数摘要会实时显示不代表执行顺序的稳定函数标识与完整接口契约，外部触发缺少点位时不能完成第 4 步。
+- V2 当前只实现页面、导航、模型库/测试步/姿态动作的前端加减与动作排序、类型联动、动态模型选择、ROI 框选、判定与函数接口摘要以及统一校验；页面使用示例数据，**不会从磁盘导入模型，也不会读取、保存或发布项目配置，尚未接入真实图源、PLC、IO、传感器或消息总线**。这些外部信号字段是后续 C# Trigger Adapter 的前端契约，不代表现场协议已经可用。
+
+直接打开 V2 前端预览：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-preview
+```
+
+直接打开 USB 图源选中状态用于回归检查：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-source-preview
+```
+
+直接打开多模型库步骤用于评审：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-models-preview
+```
+
+直接打开 ROI 鼠标框选步骤用于评审：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-roi-preview
+```
+
+直接打开判定条件实时摘要步骤用于评审：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-rule-preview
+```
+
+直接打开外部触发与运行接口用于评审：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-trigger-preview
+```
+
+生成用于视觉核验的首屏快照：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-snapshot
+```
+
+生成测试步基本信息或姿态类型的视觉核验快照：
+
+```powershell
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-items-snapshot
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-pose-snapshot
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-source-snapshot
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-models-snapshot
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-roi-snapshot
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-rule-snapshot
+dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-trigger-snapshot
+```
+
 ## 当前可验收版本
 
 当前版本为 **v0.6.0 ONNX YOLO 端到端推理验收版**，已形成可直接启动的 Windows Release：
@@ -83,7 +150,7 @@ dotnet run --project src/VisualInspection.App/VisualInspection.App.csproj
 ## 目录
 
 ```text
-src/VisualInspection.App             WPF 工作台、Admin 图源页、内置验收数据与启动编排
+src/VisualInspection.App             WPF 工作台、Admin 图源页、经典设置页、V2 顺序向导前端、内置验收数据与启动编排
 src/VisualInspection.Core            配置、Test Sequence 编辑、规则、分析/模型契约与 Runner
 src/VisualInspection.Infrastructure  Folder、ONNX Runtime/标签读取、YOLO 端到端输出、验收清单、JSON 配置与日志
 tests/VisualInspection.Core.Tests    规则、配置/序列编辑、ONNX 元数据/真实模型与文件夹批量探针、存储、Folder 与 Runner 回归测试

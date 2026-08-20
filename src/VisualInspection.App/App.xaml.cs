@@ -15,6 +15,127 @@ public partial class App : Application
 
         try
         {
+            var captureInspectionItems = e.Args.Contains(
+                "--v2-wizard-items-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            var capturePoseContent = e.Args.Contains(
+                "--v2-wizard-pose-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            var captureInputSource = e.Args.Contains(
+                "--v2-wizard-source-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            var captureModels = e.Args.Contains(
+                "--v2-wizard-models-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            var captureRoi = e.Args.Contains(
+                "--v2-wizard-roi-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            var captureRule = e.Args.Contains(
+                "--v2-wizard-rule-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            var captureTrigger = e.Args.Contains(
+                "--v2-wizard-trigger-snapshot",
+                StringComparer.OrdinalIgnoreCase);
+            if (captureInspectionItems || capturePoseContent || captureInputSource || captureModels || captureRoi || captureRule || captureTrigger ||
+                e.Args.Contains("--v2-wizard-snapshot", StringComparer.OrdinalIgnoreCase))
+            {
+                var snapshot = new TestSequenceWizardV2Window();
+                snapshot.Show();
+                if (captureInspectionItems)
+                {
+                    snapshot.ShowInspectionItemsStepForPreview();
+                }
+                else if (capturePoseContent)
+                {
+                    snapshot.ShowPoseContentStepForPreview();
+                }
+                else if (captureInputSource)
+                {
+                    snapshot.ShowUsbSourceStepForPreview();
+                }
+                else if (captureModels)
+                {
+                    snapshot.ShowModelsStepForPreview();
+                }
+                else if (captureRoi)
+                {
+                    snapshot.ShowTargetContentStepForPreview();
+                }
+                else if (captureRule)
+                {
+                    snapshot.ShowTargetRuleStepForPreview();
+                }
+                else if (captureTrigger)
+                {
+                    snapshot.ShowTriggerStepForPreview();
+                }
+
+                await snapshot.Dispatcher.InvokeAsync(
+                    capturePoseContent
+                        ? snapshot.SavePoseSnapshot
+                        : captureInputSource
+                            ? snapshot.SaveSourceSnapshot
+                            : captureModels
+                                ? snapshot.SaveModelsSnapshot
+                                : captureRoi
+                                    ? snapshot.SaveRoiSnapshot
+                                    : captureRule
+                                        ? snapshot.SaveRuleSnapshot
+                                        : captureTrigger
+                                            ? snapshot.SaveTriggerSnapshot
+                                            : snapshot.SaveSnapshot,
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                snapshot.Close();
+                Shutdown(0);
+                return;
+            }
+
+            var previewInputSource = e.Args.Contains(
+                "--v2-wizard-source-preview",
+                StringComparer.OrdinalIgnoreCase);
+            var previewModels = e.Args.Contains(
+                "--v2-wizard-models-preview",
+                StringComparer.OrdinalIgnoreCase);
+            var previewRoi = e.Args.Contains(
+                "--v2-wizard-roi-preview",
+                StringComparer.OrdinalIgnoreCase);
+            var previewRule = e.Args.Contains(
+                "--v2-wizard-rule-preview",
+                StringComparer.OrdinalIgnoreCase);
+            var previewTrigger = e.Args.Contains(
+                "--v2-wizard-trigger-preview",
+                StringComparer.OrdinalIgnoreCase);
+            if (previewInputSource || previewModels || previewRoi || previewRule || previewTrigger ||
+                e.Args.Contains("--v2-wizard-preview", StringComparer.OrdinalIgnoreCase))
+            {
+                var preview = new TestSequenceWizardV2Window();
+                MainWindow = preview;
+                preview.Show();
+                if (previewInputSource)
+                {
+                    preview.ShowUsbSourceStepForPreview();
+                }
+                else if (previewModels)
+                {
+                    preview.ShowModelsStepForPreview();
+                }
+                else if (previewRoi)
+                {
+                    preview.ShowTargetContentStepForPreview();
+                }
+                else if (previewRule)
+                {
+                    preview.ShowTargetRuleStepForPreview();
+                }
+                else if (previewTrigger)
+                {
+                    preview.ShowTriggerStepForPreview();
+                }
+
+                ShutdownMode = System.Windows.ShutdownMode.OnLastWindowClose;
+                return;
+            }
+
             if (e.Args.Contains("--ui-construction-smoke", StringComparer.OrdinalIgnoreCase))
             {
                 Shutdown(await UiConstructionSmokeRunner.RunAsync());
