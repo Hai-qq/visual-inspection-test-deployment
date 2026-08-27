@@ -103,19 +103,6 @@ try {
     $sourceState = if (git -C $workspace status --porcelain) { 'working-tree-with-uncommitted-changes' } else { 'clean-working-tree' }
     $builtAt = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ssK')
 
-    $instructions = @"
-Visual Inspection Test Deployment - 前端演示版 v0.2
-
-双击 $executableName，直接进入已确认的 V2 五步前端界面。
-该 EXE 为 Windows x64 自包含单文件，不要求另行安装 .NET 8 Desktop Runtime。
-
-边界：此包用于前端界面演示，不代表视频读取、相机/PLC/IO 接入、图像分割/姿态推理、自定义函数执行或 V2 生产运行链已经完成。
-"@
-    [System.IO.File]::WriteAllText(
-        (Join-Path $outputPath 'README-前端演示.txt'),
-        $instructions,
-        [System.Text.UTF8Encoding]::new($true))
-
     $receipt = @"
 Artifact=$executableName
 BuiltAt=$builtAt
@@ -131,10 +118,21 @@ Format=pass
 UIConstructionSmoke=pass
 SHA256=$hash
 "@
+    $stagingReceipt = Join-Path $stagingPath 'build-receipt.txt'
     [System.IO.File]::WriteAllText(
-        (Join-Path $outputPath 'build-receipt.txt'),
+        $stagingReceipt,
         $receipt,
         [System.Text.UTF8Encoding]::new($false))
+    if ((Get-Item -LiteralPath $stagingReceipt).Length -eq 0) {
+        throw 'Generated build receipt is empty.'
+    }
+
+    $readmeTemplate = Join-Path $PSScriptRoot 'FrontendDemo-README.txt'
+    if (-not (Test-Path -LiteralPath $readmeTemplate -PathType Leaf)) {
+        throw "Frontend demo README template is missing: $readmeTemplate"
+    }
+    Copy-Item -LiteralPath $readmeTemplate -Destination (Join-Path $outputPath 'README-FrontendDemo.txt') -Force
+    Copy-Item -LiteralPath $stagingReceipt -Destination (Join-Path $outputPath 'build-receipt.txt') -Force
 
     Write-Host "Frontend demo executable: $executablePath"
     Write-Host "SHA256: $hash"
