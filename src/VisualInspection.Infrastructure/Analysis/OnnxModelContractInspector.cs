@@ -26,13 +26,23 @@ public static class OnnxModelContractInspector
         };
     }
 
-    internal static SessionOptions CreateSessionOptions()
+    internal static SessionOptions CreateSessionOptions(int? intraOpThreads = null, int? interOpThreads = null)
     {
         var options = new SessionOptions
         {
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
             ExecutionMode = ExecutionMode.ORT_SEQUENTIAL
         };
+        if (intraOpThreads is > 0)
+        {
+            options.IntraOpNumThreads = intraOpThreads.Value;
+        }
+
+        if (interOpThreads is > 0)
+        {
+            options.InterOpNumThreads = interOpThreads.Value;
+        }
+
         options.AppendExecutionProvider_CPU();
         return options;
     }

@@ -12,12 +12,13 @@ public sealed class FolderImageSource : IImageSource
 
     private readonly FolderInputOptions _options;
     private readonly string _baseDirectory;
+    private readonly int _startFileIndex;
     private readonly List<string> _files = [];
     private int _nextFileIndex;
     private int _failedCount;
     private long _sequenceNumber;
 
-    public FolderImageSource(InputSourceDefinition definition, string baseDirectory)
+    public FolderImageSource(InputSourceDefinition definition, string baseDirectory, int startFileIndex = 0)
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (definition.Type != InputSourceType.Folder || definition.Folder is null)
@@ -35,10 +36,16 @@ public sealed class FolderImageSource : IImageSource
             throw new ArgumentException("必须提供基础目录。", nameof(baseDirectory));
         }
 
+        if (startFileIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startFileIndex), "起始图片索引不能为负数。");
+        }
+
         Id = definition.Id;
         Name = definition.Name;
         _options = definition.Folder;
         _baseDirectory = Path.GetFullPath(baseDirectory);
+        _startFileIndex = startFileIndex;
     }
 
     public Guid Id { get; }
@@ -75,8 +82,10 @@ public sealed class FolderImageSource : IImageSource
                 .Where(path => SupportedExtensions.Contains(Path.GetExtension(path))));
 
             SortFiles(_files, _options.SortOrder);
+            _nextFileIndex = _files.Count == 0 ? 0 : _startFileIndex % _files.Count;
+            _sequenceNumber = _nextFileIndex;
             State = _files.Count == 0 ? ImageSourceState.Completed : ImageSourceState.Ready;
-            Progress = new ImageSourceProgress(0, _files.Count, 0, null);
+            Progress = new ImageSourceProgress(_nextFileIndex, _files.Count, 0, null);
             return Task.CompletedTask;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -178,11 +187,11 @@ public sealed class FolderImageSource : IImageSource
             throw new InvalidOperationException("文件夹图像源已关闭。");
         }
 
-        _nextFileIndex = 0;
+        _nextFileIndex = _files.Count == 0 ? 0 : _startFileIndex % _files.Count;
         _failedCount = 0;
-        _sequenceNumber = 0;
+        _sequenceNumber = _nextFileIndex;
         State = _files.Count == 0 ? ImageSourceState.Completed : ImageSourceState.Ready;
-        Progress = new ImageSourceProgress(0, _files.Count, 0, null);
+        Progress = new ImageSourceProgress(_nextFileIndex, _files.Count, 0, null);
         return Task.CompletedTask;
     }
 

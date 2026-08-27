@@ -51,7 +51,7 @@ public partial class App : Application
                 }
                 else if (captureInputSource)
                 {
-                    snapshot.ShowUsbSourceStepForPreview();
+                    snapshot.ShowSourceStepForPreview();
                 }
                 else if (captureModels)
                 {
@@ -105,15 +105,21 @@ public partial class App : Application
             var previewTrigger = e.Args.Contains(
                 "--v2-wizard-trigger-preview",
                 StringComparer.OrdinalIgnoreCase);
+            var frontendDemoDefault = e.Args.Length == 0 && string.Equals(
+                typeof(App).Assembly.GetName().Name,
+                "VisualInspection.FrontendDemo",
+                StringComparison.Ordinal);
             if (previewInputSource || previewModels || previewRoi || previewRule || previewTrigger ||
-                e.Args.Contains("--v2-wizard-preview", StringComparer.OrdinalIgnoreCase))
+                e.Args.Contains("--v2-wizard-preview", StringComparer.OrdinalIgnoreCase) ||
+                e.Args.Contains("--frontend-demo", StringComparer.OrdinalIgnoreCase) ||
+                frontendDemoDefault)
             {
                 var preview = new TestSequenceWizardV2Window();
                 MainWindow = preview;
                 preview.Show();
                 if (previewInputSource)
                 {
-                    preview.ShowUsbSourceStepForPreview();
+                    preview.ShowSourceStepForPreview();
                 }
                 else if (previewModels)
                 {
@@ -132,6 +138,27 @@ public partial class App : Application
                     preview.ShowTriggerStepForPreview();
                 }
 
+                ShutdownMode = System.Windows.ShutdownMode.OnLastWindowClose;
+                return;
+            }
+
+            if (e.Args.Contains("--operator-preview", StringComparer.OrdinalIgnoreCase))
+            {
+                var previewBootstrap = await ApplicationBootstrapper.LoadOrCreateProjectAsync();
+                var previewSession = new UserSession(
+                    Guid.Empty,
+                    "operator-preview",
+                    "界面预览",
+                    UserRole.Admin);
+                var operatorPreview = new MainWindow(
+                    new MainWindowViewModel(previewBootstrap, previewSession),
+                    previewBootstrap,
+                    previewSession)
+                {
+                    Title = "管理员 · 操作员工作台（界面预览）"
+                };
+                MainWindow = operatorPreview;
+                operatorPreview.Show();
                 ShutdownMode = System.Windows.ShutdownMode.OnLastWindowClose;
                 return;
             }

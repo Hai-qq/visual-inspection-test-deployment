@@ -20,6 +20,12 @@ namespace VisualInspection.App.ViewModels;
 
 public sealed class MainWindowViewModel : ObservableObject
 {
+    internal const double DetectionBorderThickness = 4;
+    internal const double RoiBorderThickness = 4;
+    internal const double RoiLabelFontSize = 16;
+    private const double OverlayReferenceWidth = 640;
+    private const double OverlayReferenceHeight = 360;
+
     private readonly UserSession _session;
     private readonly ProjectConfiguration _project;
     private readonly TestSequenceDefinition _activeSequence;
@@ -42,6 +48,10 @@ public sealed class MainWindowViewModel : ObservableObject
     private Brush _currentResultBrush = Brushes.SlateGray;
     private bool _isRoiVisible;
     private string _currentRoiLabel = string.Empty;
+    private string _serialNumberInput = string.Empty;
+    private string? _activeSerialNumber;
+    private bool _serialNumberConsumed;
+    private int _folderSourceCursor;
 
     public MainWindowViewModel(ApplicationBootstrapResult bootstrap, UserSession? session = null)
     {
@@ -102,7 +112,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
         Statistics = new StatisticsViewModel();
         Logs = new ObservableCollection<ExecutionLogEntryViewModel>();
-        _startCommand = new AsyncRelayCommand(StartAsync, () => !IsRunning && IsRuntimeReady);
+        _startCommand = new AsyncRelayCommand(
+            StartAsync,
+            () => !IsRunning && IsRuntimeReady && HasSerialNumber);
         _stopCommand = new RelayCommand(Stop, () => IsRunning);
         _resetCommand = new RelayCommand(Reset, () => !IsRunning);
         AddLog("INFO", _statusText);
@@ -207,22 +219,63 @@ public sealed class MainWindowViewModel : ObservableObject
         private set => SetProperty(ref _currentRoiLabel, value);
     }
 
+    public string SerialNumberInput
+    {
+        get => _serialNumberInput;
+        set
+        {
+            if (SetProperty(ref _serialNumberInput, value ?? string.Empty))
+            {
+                OnPropertyChanged(nameof(SerialNumberStatusText));
+                OnPropertyChanged(nameof(HasSerialNumber));
+                _startCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool HasSerialNumber => !string.IsNullOrWhiteSpace(SerialNumberInput);
+
+    public string SerialNumberStatusText => string.IsNullOrWhiteSpace(SerialNumberInput)
+        ? "必须先输入序列号才能开始 · 支持人工输入、扫码枪或二维码回填"
+        : "序列号已录入 · 点击“开始”后只检测一个产品 / 一张图片 · 工厂格式规则待提供";
+
     private async Task StartAsync()
     {
+        var serialNumber = SerialNumberInput.Trim();
+        if (serialNumber.Length == 0)
+        {
+            StatusText = "请先输入产品序列号。";
+            return;
+        }
+
         ResetItems();
         _pendingAudit.Clear();
+        _activeSerialNumber = serialNumber;
+        _serialNumberConsumed = false;
         _runCancellation = new CancellationTokenSource();
         IsRunning = true;
         CurrentResult = "运行中";
         CurrentResultBrush = new SolidColorBrush(Color.FromRgb(0, 145, 95));
-        CurrentMeasured = "实测：正在采集输入图像";
+        CurrentMeasured = $"实测：序列号 {serialNumber} · 正在采集输入图像";
+        AddLog("INFO", $"序列号 {serialNumber} 已提交，开始单件检测。");
+        _pendingAudit.Add(new ExecutionAuditEntry
+        {
+            TimestampUtc = DateTimeOffset.UtcNow,
+            Level = "INFO",
+            Event = "serial-run-started",
+            Message = $"序列号 {serialNumber} 开始单件检测。",
+            SerialNumber = serialNumber
+        });
 
         try
         {
             var folderPath = _activeSource.Folder is null
                 ? throw new InvalidOperationException("验收运行模式需要使用文件夹图源。")
                 : ApplicationBootstrapper.ResolveFolderPath(_activeSource.Folder.FolderPath);
-            await using var source = ImageSourceFactory.Create(_activeSource, AppContext.BaseDirectory);
+            await using var source = ImageSourceFactory.Create(
+                _activeSource,
+                AppContext.BaseDirectory,
+                IsSingleImageFolderSequence() ? _folderSourceCursor : 0);
             var onnxProbe = OnnxYoloInspectionProvider.Probe(_project, _activeSequence, AppContext.BaseDirectory);
             using var onnxProvider = onnxProbe.IsReady
                 ? OnnxYoloInspectionProvider.Create(_project, _activeSequence, AppContext.BaseDirectory)
@@ -230,31 +283,18 @@ public sealed class MainWindowViewModel : ObservableObject
             IInspectionProvider provider = (IInspectionProvider?)onnxProvider ??
                 await ManifestInspectionProvider.LoadAsync(folderPath, _project, _runCancellation.Token);
             var progress = new InlineProgress<TestRunUpdate>(HandleRunUpdate);
-            if (IsFolderBatchSequence())
+            if (IsSingleImageFolderSequence())
             {
-                var imageCompleted = new InlineProgress<FolderBatchImageRunResult>(HandleFolderImageCompleted);
-                var batchResult = await new FolderBatchTestSequenceRunner().RunAsync(
+                var imageResult = await new FolderBatchTestSequenceRunner().RunSingleAsync(
                     _project,
                     _activeSequence,
                     source,
                     provider,
                     progress,
-                    imageCompleted,
                     _runCancellation.Token);
-                ApplyFolderBatchResult(batchResult);
-                _pendingAudit.Add(new ExecutionAuditEntry
-                {
-                    TimestampUtc = DateTimeOffset.UtcNow,
-                    Level = batchResult.WasStopped ? "WARN" : batchResult.Verdict switch
-                    {
-                        InspectionVerdict.Fail => "WARN",
-                        InspectionVerdict.Error => "ERROR",
-                        _ => "INFO"
-                    },
-                    Event = batchResult.WasStopped ? "folder-batch-stopped" : "folder-batch-completed",
-                    Message = batchResult.Summary,
-                    Verdict = batchResult.Verdict
-                });
+                _serialNumberConsumed = true;
+                AdvanceFolderCursor(imageResult);
+                ApplySingleFolderImageResult(imageResult, serialNumber);
             }
             else
             {
@@ -271,6 +311,8 @@ public sealed class MainWindowViewModel : ObservableObject
                     UpdateStatistics(result.Verdict);
                 }
 
+                StatusText = $"序列号 {serialNumber} · {result.Summary}";
+
                 _pendingAudit.Add(new ExecutionAuditEntry
                 {
                     TimestampUtc = DateTimeOffset.UtcNow,
@@ -282,7 +324,8 @@ public sealed class MainWindowViewModel : ObservableObject
                         _ => "INFO"
                     },
                     Event = result.WasStopped ? "run-stopped" : "run-completed",
-                    Message = result.Summary,
+                    Message = $"序列号 {serialNumber} · {result.Summary}",
+                    SerialNumber = serialNumber,
                     Verdict = result.Verdict
                 });
             }
@@ -303,7 +346,8 @@ public sealed class MainWindowViewModel : ObservableObject
                     TimestampUtc = DateTimeOffset.UtcNow,
                     Level = "ERROR",
                     Event = "unhandled-run-error",
-                    Message = exception.ToString()
+                    Message = exception.ToString(),
+                    SerialNumber = _activeSerialNumber
                 }
             ]);
         }
@@ -312,6 +356,13 @@ public sealed class MainWindowViewModel : ObservableObject
             IsRunning = false;
             _runCancellation?.Dispose();
             _runCancellation = null;
+            if (_serialNumberConsumed)
+            {
+                SerialNumberInput = string.Empty;
+            }
+
+            _activeSerialNumber = null;
+            _serialNumberConsumed = false;
         }
     }
 
@@ -358,6 +409,7 @@ public sealed class MainWindowViewModel : ObservableObject
             Event = update.Kind.ToString(),
             ItemName = string.IsNullOrWhiteSpace(update.ItemName) ? null : update.ItemName,
             Message = update.Message,
+            SerialNumber = _activeSerialNumber,
             Verdict = update.Verdict
         });
 
@@ -386,6 +438,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 StatusText = $"运行中 · 第 {itemViewModel.Number} 项，共 {Sequence.Count} 项";
                 break;
             case TestRunUpdateKind.FrameAcquired:
+                _serialNumberConsumed = true;
                 CurrentMeasured = $"实测：{update.Message}";
                 break;
             case TestRunUpdateKind.FrameAnalyzed:
@@ -433,21 +486,20 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    private bool IsFolderBatchSequence() =>
+    private bool IsSingleImageFolderSequence() =>
         _activeSource.Type == InputSourceType.Folder &&
         _activeSequence.Items
             .Where(item => item.Enabled)
             .All(item => item.Type == TestItemType.Normal);
 
-    private void HandleFolderImageCompleted(FolderBatchImageRunResult imageResult)
+    private void ApplySingleFolderImageResult(
+        FolderBatchImageRunResult imageResult,
+        string serialNumber)
     {
         var runResult = imageResult.RunResult;
         var fileName = Path.GetFileName(imageResult.FrameOrigin) is { Length: > 0 } name
             ? name
-            : $"图像 {imageResult.SourceIndex}";
-        var position = imageResult.TotalFileCount > 0
-            ? $"{imageResult.SourceIndex}/{imageResult.TotalFileCount}"
-            : imageResult.SourceIndex.ToString(CultureInfo.InvariantCulture);
+            : "当前图片";
         var verdictText = runResult.WasStopped ? "已停止" : FormatVerdict(runResult.Verdict);
         var level = runResult.WasStopped ? "WARN" : runResult.Verdict switch
         {
@@ -455,7 +507,7 @@ public sealed class MainWindowViewModel : ObservableObject
             InspectionVerdict.Error => "ERROR",
             _ => "INFO"
         };
-        var message = $"文件夹图片 {position} · {fileName} · {verdictText}";
+        var message = $"序列号 {serialNumber} · {fileName} · {verdictText}";
 
         if (!runResult.WasStopped)
         {
@@ -469,22 +521,22 @@ public sealed class MainWindowViewModel : ObservableObject
             TimestampUtc = DateTimeOffset.UtcNow,
             RunId = runResult.RunId,
             Level = level,
-            Event = runResult.WasStopped ? "folder-image-stopped" : "folder-image-completed",
+            Event = runResult.WasStopped ? "serial-image-stopped" : "serial-image-completed",
             Message = message,
+            SerialNumber = serialNumber,
             Verdict = runResult.Verdict
         });
+        CurrentResult = runResult.WasStopped ? "已停止" : FormatVerdict(runResult.Verdict);
+        CurrentResultBrush = runResult.WasStopped
+            ? Brushes.SlateGray
+            : GetVerdictBrush(runResult.Verdict);
     }
 
-    private void ApplyFolderBatchResult(FolderBatchRunResult batchResult)
+    private void AdvanceFolderCursor(FolderBatchImageRunResult imageResult)
     {
-        StatusText = batchResult.Summary;
-        CurrentResult = batchResult.WasStopped ? "已停止" : FormatVerdict(batchResult.Verdict);
-        CurrentResultBrush = batchResult.WasStopped
-            ? Brushes.SlateGray
-            : GetVerdictBrush(batchResult.Verdict);
-        AddLog(
-            batchResult.WasStopped ? "WARN" : batchResult.Verdict == InspectionVerdict.Pass ? "INFO" : "WARN",
-            batchResult.Summary);
+        _folderSourceCursor = imageResult.TotalFileCount <= 0
+            ? 0
+            : imageResult.SourceIndex % imageResult.TotalFileCount;
     }
 
     private void AddLog(string level, string message)
@@ -584,9 +636,13 @@ public sealed class MainWindowViewModel : ObservableObject
         int imageWidth,
         int imageHeight)
     {
-        var roiPen = new Pen(new SolidColorBrush(Color.FromRgb(61, 205, 88)), 3)
+        var overlayScale = GetOverlayScale(imageWidth, imageHeight);
+        var roiPen = new Pen(
+            new SolidColorBrush(Color.FromRgb(61, 205, 88)),
+            RoiBorderThickness * overlayScale)
         {
-            DashStyle = DashStyles.Dash
+            DashStyle = DashStyles.Dash,
+            LineJoin = PenLineJoin.Round
         };
         roiPen.Freeze();
         foreach (var region in item.Rules.SelectMany(rule => rule.Scope.Regions))
@@ -599,7 +655,15 @@ public sealed class MainWindowViewModel : ObservableObject
                 (region.X2 - region.X1) * scaleX,
                 (region.Y2 - region.Y1) * scaleY);
             context.DrawRectangle(null, roiPen, rectangle);
-            DrawOverlayLabel(context, $"ROI · {region.Name}", rectangle.Left, rectangle.Top, Color.FromRgb(0, 112, 74));
+            DrawOverlayLabel(
+                context,
+                $"ROI · {region.Name}",
+                rectangle.Left,
+                rectangle.Top,
+                Color.FromRgb(0, 112, 74),
+                imageWidth,
+                imageHeight,
+                RoiLabelFontSize * overlayScale);
         }
     }
 
@@ -617,12 +681,18 @@ public sealed class MainWindowViewModel : ObservableObject
             .ToHashSet();
         var scaleX = (double)imageWidth / frame.Width;
         var scaleY = (double)imageHeight / frame.Height;
+        var overlayScale = GetOverlayScale(imageWidth, imageHeight);
         foreach (var detection in detections)
         {
             var color = failTargets.Contains(detection.TargetId)
                 ? Color.FromRgb(201, 64, 58)
                 : Color.FromRgb(0, 112, 74);
-            var pen = new Pen(new SolidColorBrush(color), 3);
+            var pen = new Pen(
+                new SolidColorBrush(color),
+                DetectionBorderThickness * overlayScale)
+            {
+                LineJoin = PenLineJoin.Round
+            };
             pen.Freeze();
             var rectangle = new Rect(
                 detection.X1 * scaleX,
@@ -630,14 +700,20 @@ public sealed class MainWindowViewModel : ObservableObject
                 (detection.X2 - detection.X1) * scaleX,
                 (detection.Y2 - detection.Y1) * scaleY);
             context.DrawRectangle(null, pen, rectangle);
-            var targetName = _project.Targets.FirstOrDefault(target => target.Id == detection.TargetId)?.Name ?? "未知目标";
-            DrawOverlayLabel(
-                context,
-                $"{targetName} {detection.Confidence:P0}",
-                rectangle.Left,
-                rectangle.Bottom,
-                color);
         }
+    }
+
+    internal static double GetOverlayScale(int imageWidth, int imageHeight)
+    {
+        if (imageWidth <= 0 || imageHeight <= 0)
+        {
+            return 1;
+        }
+
+        var scale = Math.Min(
+            imageWidth / OverlayReferenceWidth,
+            imageHeight / OverlayReferenceHeight);
+        return Math.Clamp(scale, 0.5, 16);
     }
 
     private static void DrawOverlayLabel(
@@ -645,22 +721,36 @@ public sealed class MainWindowViewModel : ObservableObject
         string text,
         double left,
         double anchorY,
-        Color color)
+        Color color,
+        int imageWidth,
+        int imageHeight,
+        double fontSize)
     {
         var formatted = new FormattedText(
             text,
             CultureInfo.GetCultureInfo("zh-CN"),
             FlowDirection.LeftToRight,
-            new Typeface("Microsoft YaHei UI"),
-            13,
+            new Typeface(
+                new FontFamily("Microsoft YaHei UI"),
+                FontStyles.Normal,
+                FontWeights.SemiBold,
+                FontStretches.Normal),
+            fontSize,
             Brushes.White,
             1);
-        var top = Math.Clamp(anchorY - formatted.Height - 6, 0, double.MaxValue);
+        var horizontalPadding = fontSize * 0.45;
+        var verticalPadding = fontSize * 0.24;
+        var labelWidth = formatted.Width + (horizontalPadding * 2);
+        var labelHeight = formatted.Height + (verticalPadding * 2);
+        var boundedLeft = Math.Clamp(left, 0, Math.Max(0, imageWidth - labelWidth));
+        var top = Math.Clamp(anchorY - labelHeight, 0, Math.Max(0, imageHeight - labelHeight));
         context.DrawRectangle(
-            new SolidColorBrush(Color.FromArgb(220, color.R, color.G, color.B)),
+            new SolidColorBrush(Color.FromArgb(235, color.R, color.G, color.B)),
             null,
-            new Rect(left, top, formatted.Width + 10, formatted.Height + 6));
-        context.DrawText(formatted, new Point(left + 5, top + 3));
+            new Rect(boundedLeft, top, labelWidth, labelHeight));
+        context.DrawText(
+            formatted,
+            new Point(boundedLeft + horizontalPadding, top + verticalPadding));
     }
 
     private static ExecutionState ToExecutionState(InspectionVerdict? verdict) => verdict switch

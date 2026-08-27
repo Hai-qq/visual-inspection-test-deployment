@@ -120,6 +120,13 @@
                                 <Setter Property="Foreground" Value="{StaticResource GreenDarkBrush}" />
                                 <Setter TargetName="SelectedSourceGlyph" Property="Visibility" Value="Visible" />
                             </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="#F4F5F4" />
+                                <Setter Property="BorderBrush" Value="#D6DAD7" />
+                                <Setter Property="Foreground" Value="#858D88" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                                <Setter TargetName="SourceCardBorder" Property="Opacity" Value="0.82" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -254,9 +261,9 @@
                 </StackPanel>
                 <Border Grid.Column="1" Background="#FFF6E8" BorderBrush="#E9D3A5" BorderThickness="1"
                         CornerRadius="3" Padding="10,5" Margin="0,0,12,0" VerticalAlignment="Center">
-                    <TextBlock Text="V2 前端预览 · 不会保存配置" FontSize="9" FontWeight="SemiBold" Foreground="#8A630B" />
+                    <TextBlock x:Name="PreviewModeText" Text="前端界面确认稿" FontSize="9" FontWeight="SemiBold" Foreground="#8A630B" />
                 </Border>
-                <Button Grid.Column="2" Content="关闭预览" Click="Close_Click" Padding="12,5" FontSize="9" VerticalAlignment="Center" />
+                <Button x:Name="ClosePreviewButton" Grid.Column="2" Content="关闭预览" Click="Close_Click" Padding="12,5" FontSize="9" VerticalAlignment="Center" />
             </Grid>
         </Border>
 
@@ -327,12 +334,10 @@
                                 <TextBlock Text=" · " Foreground="{StaticResource MutedTextBrush}" Margin="6,0" />
                                 <TextBlock Text="{Binding SelectedInspectionItem.Name}" Foreground="{StaticResource MutedTextBrush}" />
                             </StackPanel>
-                            <UniformGrid x:Name="TestBlockModuleTabs" Grid.Column="1" Columns="4" Width="480" VerticalAlignment="Center">
-                                <Button x:Name="TestBlockBasicStageButton" Content="基本信息" Tag="0" Click="TestBlockStageButton_Click" Style="{StaticResource TestBlockModuleTabButton}" />
-                                <Button x:Name="TestBlockContentStageButton" Content="检测内容" Tag="1" Click="TestBlockStageButton_Click" Style="{StaticResource TestBlockModuleTabButton}" />
-                                <Button x:Name="TestBlockRuleStageButton" Content="判定条件" Tag="2" Click="TestBlockStageButton_Click" Style="{StaticResource TestBlockModuleTabButton}" />
-                                <Button x:Name="TestBlockTriggerStageButton" Content="触发与运行" Tag="3" Click="TestBlockStageButton_Click" Style="{StaticResource TestBlockModuleTabButton}" />
-                            </UniformGrid>
+                            <StackPanel x:Name="TestBlockModuleTabs" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="TestBlockBasicStageButton" Content="基本信息" Tag="0" Width="132" Click="TestBlockStageButton_Click" Style="{StaticResource TestBlockModuleTabButton}" />
+                                <Button x:Name="TestBlockTriggerStageButton" Content="自定义函数" Tag="3" Width="132" Click="TestBlockStageButton_Click" Style="{StaticResource TestBlockModuleTabButton}" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                     <ScrollViewer x:Name="Step1Panel" VerticalScrollBarVisibility="Auto">
@@ -363,7 +368,8 @@
                                             <TextBlock Style="{StaticResource RequiredStar}" />
                                             <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="用于区分不同产品或检测项目，并显示在操作员测试页面。" />
                                         </StackPanel>
-                                        <TextBox x:Name="ProjectNameTextBox" Height="36" Text="Fan 风扇检测" Padding="10,6"
+                                        <TextBox x:Name="ProjectNameTextBox" Height="36" Padding="10,6"
+                                                 Text="{Binding Editor.ProjectName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  TextChanged="RequiredField_TextChanged" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="2">
@@ -372,7 +378,8 @@
                                             <TextBlock Style="{StaticResource RequiredStar}" />
                                             <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="说明这套检测运行在哪个生产线或测试工位。" />
                                         </StackPanel>
-                                        <TextBox x:Name="StationNameTextBox" Height="36" Text="装配线 1 号工位" Padding="10,6"
+                                        <TextBox x:Name="StationNameTextBox" Height="36" Padding="10,6"
+                                                 Text="{Binding Editor.Workstation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  TextChanged="RequiredField_TextChanged" />
                                     </StackPanel>
                                     <StackPanel Grid.Row="2">
@@ -381,15 +388,18 @@
                                             <TextBlock Style="{StaticResource RequiredStar}" />
                                             <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="操作员开始测试时加载的检测流程名称。" />
                                         </StackPanel>
-                                        <TextBox x:Name="SequenceNameTextBox" Height="36" Text="Fan 完整性检测" Padding="10,6"
+                                        <TextBox x:Name="SequenceNameTextBox" Height="36" Padding="10,6"
+                                                 Text="{Binding Editor.SequenceName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  TextChanged="RequiredField_TextChanged" />
                                     </StackPanel>
                                     <StackPanel Grid.Row="2" Grid.Column="2">
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                             <TextBlock Text="版本" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
-                                            <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="用于区分同一测试序列的不同配置版本；当前前端预览不会发布。" />
+                                            <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="用于区分同一测试流程的不同配置稿。" />
                                         </StackPanel>
-                                        <TextBox Height="36" Text="V2.0" Padding="10,6" />
+                                        <TextBox x:Name="SequenceVersionTextBox" Height="36" Padding="10,6"
+                                                 Text="{Binding Editor.SequenceVersion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextChanged="RequiredField_TextChanged" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -397,40 +407,50 @@
                     </ScrollViewer>
 
                     <ScrollViewer x:Name="Step2Panel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="34,28" Width="900" HorizontalAlignment="Center">
-                            <TextBlock Text="图片从哪里来？" FontSize="20" FontWeight="SemiBold" />
-                            <TextBlock Text="请选择一种图源。后续页面只显示与该图源相关的设置。"
+                        <StackPanel Margin="34,24" Width="1040" HorizontalAlignment="Center">
+                            <TextBlock Text="图片或视频从哪里来？" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="图片文件夹与视频文件夹分开选择，当前只能选择其中一种；摄像头入口暂列为待开发。"
                                        Foreground="{StaticResource MutedTextBrush}" Margin="0,8,0,24" />
-                            <UniformGrid Columns="3">
+                            <UniformGrid Columns="4">
                                 <RadioButton x:Name="FolderSourceRadioButton" GroupName="InputSource" IsChecked="True"
                                              Checked="SourceSelection_Changed"
                                              Style="{StaticResource SourceChoiceCard}"
-                                             ToolTip="选择后，功能版会按设定顺序遍历文件夹中的图片。">
+                                             ToolTip="选择后，操作台每录入一个序列号并点击开始，只读取文件夹中的下一张图片。">
                                     <StackPanel>
                                         <TextBlock Text="图片文件夹" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="按文件名顺序读取全部图片" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,7,0,0" />
+                                        <TextBlock Text="浏览包含检测图片的文件夹" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,7,0,0" />
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton x:Name="VideoFolderSourceRadioButton" GroupName="InputSource"
+                                             Checked="SourceSelection_Changed"
+                                             Style="{StaticResource SourceChoiceCard}"
+                                             ToolTip="选择后浏览包含待检测视频的文件夹；本轮不接入视频读取逻辑。">
+                                    <StackPanel>
+                                        <TextBlock Text="视频文件夹" FontSize="14" FontWeight="SemiBold" />
+                                        <TextBlock Text="浏览包含检测视频的文件夹" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,7,0,0" />
                                     </StackPanel>
                                 </RadioButton>
                                 <RadioButton x:Name="UsbCameraSourceRadioButton" GroupName="InputSource"
-                                             Checked="SourceSelection_Changed"
+                                             IsEnabled="False"
                                              Style="{StaticResource SourceChoiceCard}"
-                                             ToolTip="选择后，功能版会通过 DirectShow 打开 USB 摄像头。">
+                                             ToolTip="待开发：当前版本不提供 USB 摄像头配置和连接。">
                                     <StackPanel>
                                         <TextBlock Text="USB 摄像头" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="通过 DirectShow 直接打开" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,7,0,0" />
+                                        <TextBlock Text="待开发" FontSize="11" FontWeight="SemiBold" Foreground="#7E8781" Margin="0,7,0,0" />
                                     </StackPanel>
                                 </RadioButton>
                                 <RadioButton x:Name="IndustrialCameraSourceRadioButton" GroupName="InputSource"
-                                             Checked="SourceSelection_Changed"
-                                             Style="{StaticResource SourceChoiceCard}" Margin="0"
-                                             ToolTip="选择后，功能版会通过统一相机接口调用对应厂商适配器。">
+                                             IsEnabled="False"
+                                             Style="{StaticResource SourceChoiceCard}"
+                                             ToolTip="待开发：厂商、SDK 和设备清单确认后再接入工业相机。">
                                     <StackPanel>
                                         <TextBlock Text="工业相机" FontSize="14" FontWeight="SemiBold" />
-                                        <TextBlock Text="使用厂商适配器连接" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,7,0,0" />
+                                        <TextBlock Text="待开发" FontSize="11" FontWeight="SemiBold" Foreground="#7E8781" Margin="0,7,0,0" />
                                     </StackPanel>
                                 </RadioButton>
                             </UniformGrid>
-                            <Border Style="{StaticResource PanelBorder}" Background="#FBFCFB" Padding="20" Margin="0,22,0,0">
+                            <Border x:Name="FolderSourceSettingsPanel"
+                                    Style="{StaticResource PanelBorder}" Background="#FBFCFB" Padding="20" Margin="0,22,0,0">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -438,15 +458,19 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                            <TextBlock Text="图片文件夹" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock x:Name="FolderSourceSettingsTitleText" Text="图片文件夹" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                             <TextBlock Style="{StaticResource RequiredStar}" />
-                                            <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="系统会按设定顺序遍历该文件夹中的全部受支持图片。" />
+                                            <TextBlock x:Name="FolderSourceSettingsInfoGlyph" Style="{StaticResource InfoGlyph}" ToolTip="操作台每次录入一个序列号，只读取该文件夹中的下一张受支持图片。" />
                                         </StackPanel>
-                                        <TextBox x:Name="FolderPathTextBox" Height="36" Text="C:\检测图片\Fan" Padding="10,6"
+                                        <TextBox x:Name="FolderPathTextBox" Height="36" Padding="10,6"
+                                                 Text="{Binding Editor.SourceAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                  TextChanged="RequiredField_TextChanged" />
-                                        <TextBlock Text="校验后预计读取 24 张图片" FontSize="10" Foreground="{StaticResource GreenDarkBrush}" Margin="0,8,0,0" />
+                                        <TextBlock x:Name="FolderSourceSettingsHintText"
+                                                   Text="当前先确认图片文件夹选择界面；实际读取和检查逻辑留到功能开发阶段。"
+                                                   FontSize="10" Foreground="{StaticResource GreenDarkBrush}" Margin="0,8,0,0" />
                                     </StackPanel>
-                                    <Button Grid.Column="1" Content="选择文件夹" Margin="14,20,0,0" VerticalAlignment="Top" />
+                                    <Button x:Name="BrowseSourceFolderButton" Grid.Column="1" Content="浏览文件夹"
+                                            Click="BrowseSourceFolder_Click" Margin="14,20,0,0" VerticalAlignment="Top" />
                                 </Grid>
                             </Border>
                         </StackPanel>
@@ -491,16 +515,28 @@
                                                     <TextBlock Text=" 个模型" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
                                                 </StackPanel>
                                             </StackPanel>
-                                            <Button x:Name="AddModelButton" Grid.Column="1" Width="86" Height="30"
-                                                    Click="AddModel_Click" Padding="7,2"
-                                                    Background="White" BorderBrush="{StaticResource GreenDarkBrush}"
-                                                    Foreground="{StaticResource GreenDarkBrush}"
-                                                    ToolTip="加号：继续向当前项目添加另一个模型；每个模型都有独立的名称、类型、文件和标签。">
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center" />
-                                                    <TextBlock Text="添加模型" Margin="6,0,0,0" FontWeight="SemiBold" FontSize="10" />
-                                                </StackPanel>
-                                            </Button>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <Button x:Name="AddModelButton" Width="86" Height="30"
+                                                        Click="AddModel_Click" Padding="7,2"
+                                                        Background="White" BorderBrush="{StaticResource GreenDarkBrush}"
+                                                        Foreground="{StaticResource GreenDarkBrush}"
+                                                        ToolTip="继续向当前项目添加另一个模型；每个模型都有独立的名称、类型、文件和标签。">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBlock Text="添加模型" Margin="6,0,0,0" FontWeight="SemiBold" FontSize="10" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button x:Name="RemoveSelectedModelButton" Width="96" Height="30" Margin="8,0,0,0"
+                                                        Click="RemoveSelectedModel_Click" Padding="7,2"
+                                                        Background="White" BorderBrush="#D9B8B5" Foreground="#A33A32"
+                                                        AutomationProperties.Name="删除当前模型"
+                                                        ToolTip="删除左侧当前选中的模型；模型已被测试步使用或仅剩一个模型时不可删除。">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBlock Text="删除当前" Margin="6,0,0,0" FontWeight="SemiBold" FontSize="10" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
                                         </Grid>
 
                                         <ListBox x:Name="ModelItemsList" Grid.Row="1" Margin="0,12,0,0"
@@ -533,7 +569,7 @@
 
                                         <Border Grid.Row="2" Background="#F6F8F7" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                                 CornerRadius="3" Padding="10,8" Margin="0,10,0,0">
-                                            <TextBlock Text="提示：后续每个测试步都可从这个模型库中选择不同模型。"
+                                            <TextBlock Text="提示：先选中模型再删除；被测试步使用时需先改绑，项目至少保留 1 个模型。"
                                                        FontSize="9" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
                                         </Border>
                                     </Grid>
@@ -548,21 +584,14 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
                                             <StackPanel>
                                                 <TextBlock Text="当前模型设置" Style="{StaticResource SectionTitle}" />
                                                 <TextBlock Text="只需填写当前选中的模型，不会影响左侧其他模型。"
                                                            FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
                                             </StackPanel>
-                                            <Button x:Name="RemoveSelectedModelButton" Grid.Column="1" Width="30" Height="28"
-                                                    Content="&#xE738;" FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                                    Foreground="#A33A32" Padding="0" Click="RemoveSelectedModel_Click"
-                                                    ToolTip="减号：删除当前模型。模型已被测试步使用时，需要先改绑。" />
                                         </Grid>
 
                                         <StackPanel Grid.Row="1" Margin="0,14,0,0">
@@ -589,10 +618,9 @@
                                                     <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="按模型实际用途选择；姿态 / 时序模型也在这里统一管理。" />
                                                 </StackPanel>
                                                 <ComboBox x:Name="ModelTaskTypeComboBox" Height="36"
-                                                          SelectedIndex="{Binding SelectedModel.TypeIndex, Mode=TwoWay}">
+                                                          SelectedIndex="{Binding SelectedModel.UiTypeIndex, Mode=TwoWay}">
                                                     <ComboBoxItem Content="目标检测" />
                                                     <ComboBoxItem Content="姿态 / 时序" />
-                                                    <ComboBoxItem Content="图像分类" />
                                                     <ComboBoxItem Content="图像分割" />
                                                 </ComboBox>
                                             </StackPanel>
@@ -605,31 +633,50 @@
                                                 <TextBox Height="36" Padding="10,6"
                                                          Text="{Binding SelectedModel.FileName, UpdateSourceTrigger=PropertyChanged}" />
                                             </StackPanel>
-                                            <Button Grid.Column="3" Content="选择文件" Margin="8,20,0,0" VerticalAlignment="Top"
+                                            <Button x:Name="SelectModelFileButton" Grid.Column="3" Content="选择文件" Margin="8,20,0,0" VerticalAlignment="Top"
+                                                    Click="SelectModelFile_Click"
                                                     ToolTip="从本机选择当前模型的 .onnx 或 .pt 文件。" />
                                         </Grid>
 
-                                        <StackPanel Grid.Row="3" Margin="0,13,0,0">
+                                        <StackPanel Grid.Row="4" Margin="0,13,0,0">
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,7">
                                                 <TextBlock Text="标签 / 动作名称来源" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                                 <TextBlock Style="{StaticResource RequiredStar}" />
                                                 <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="优先自动读取；模型不带标签，或姿态动作需要自定义名称时，选择手动填写。" />
                                             </StackPanel>
-                                            <StackPanel Orientation="Horizontal">
-                                                <RadioButton Content="从当前模型自动读取"
-                                                             IsChecked="{Binding SelectedModel.AutoImportLabels, Mode=TwoWay}"
-                                                             GroupName="ModelLabelSource" Margin="0,0,24,0" />
-                                                <RadioButton Content="手动填写"
-                                                             IsChecked="{Binding SelectedModel.UseManualLabels, Mode=TwoWay}"
-                                                             GroupName="ModelLabelSource" />
-                                            </StackPanel>
+                                            <ComboBox x:Name="LabelSourceComboBox" Height="36" SelectedIndex="{Binding SelectedModel.LabelSourceIndex, Mode=TwoWay}">
+                                                <ComboBoxItem Content="自动识别（推荐）" />
+                                                <ComboBoxItem Content="手动填写" />
+                                            </ComboBox>
+                                            <Border x:Name="ManualLabelEditorPanel" Margin="0,10,0,0" Padding="12" Background="#F6F8F7"
+                                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding SelectedModel.UseManualLabels}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <StackPanel>
+                                                    <TextBlock Text="手动标签 / 动作名称" FontSize="10" FontWeight="SemiBold" />
+                                                    <TextBox Height="52" Margin="0,7,0,0" Padding="9,6" AcceptsReturn="True"
+                                                             TextWrapping="Wrap" Text="{Binding SelectedModel.ManualLabelsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                    <TextBlock Text="使用逗号或换行分隔；本轮只展示编辑入口，正式解析在功能阶段接入。"
+                                                               FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,0" />
+                                                </StackPanel>
+                                            </Border>
                                         </StackPanel>
 
-                                        <Border Grid.Row="4" Background="#F8FCF9" BorderBrush="#B8DDBF" BorderThickness="1"
+                                        <Border Grid.Row="5" Background="#F8FCF9" BorderBrush="#B8DDBF" BorderThickness="1"
                                                 CornerRadius="4" Padding="13" Margin="0,14,0,0">
                                             <StackPanel>
                                                 <TextBlock Text="{Binding SelectedModel.LabelPreviewTitle}"
                                                            FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
+                                                <TextBlock Text="自动识别或手动填写的标签会显示在这里。"
+                                                           FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
                                                 <ItemsControl ItemsSource="{Binding SelectedModel.Labels}" Margin="0,10,0,0">
                                                     <ItemsControl.ItemsPanel>
                                                         <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
@@ -646,11 +693,6 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <Border Grid.Row="5" Background="#FFF8EC" BorderBrush="#E6D2A8" BorderThickness="1"
-                                                CornerRadius="3" Padding="11,8" Margin="0,11,0,0">
-                                            <TextBlock Text="能力说明：这里先确认多模型前端流程；实际运行能力仍以已接入的 C# 模型适配器为准。"
-                                                       FontSize="9" Foreground="#76550D" TextWrapping="Wrap" />
-                                        </Border>
                                     </Grid>
                                 </Border>
                             </Grid>
@@ -669,13 +711,13 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="添加并选择测试步" FontSize="20" FontWeight="SemiBold" />
+                                <TextBlock Text="添加并排列测试步" FontSize="20" FontWeight="SemiBold" />
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="*" Foreground="#C62828" FontWeight="Bold" />
                                     <TextBlock Text=" 为必填项" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="3,1,0,0" />
                                 </StackPanel>
                             </Grid>
-                            <TextBlock Grid.Row="1" Text="每个测试步都是可独立调用的检测函数；左侧只负责选择要编辑的测试步，不规定测试步之间的执行顺序。"
+                            <TextBlock Grid.Row="1" Text="测试步按照左侧列表从上到下依次执行；可使用上下箭头调整顺序。每个测试步内部再独立配置模型、Label、区域与判定条件。"
                                        Foreground="{StaticResource MutedTextBrush}" Margin="0,6,0,12" />
                             <Grid Grid.Row="2">
                                 <Grid.ColumnDefinitions>
@@ -696,21 +738,21 @@
                                             </Grid.ColumnDefinitions>
                                             <StackPanel>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="测试步列表" Style="{StaticResource SectionTitle}" />
+                                                    <TextBlock Text="测试步列表（从上到下执行）" Style="{StaticResource SectionTitle}" />
                                                     <TextBlock Style="{StaticResource RequiredStar}" />
-                                                    <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="测试步是无序的独立函数集合；具体何时运行由测试序列、外部信号或手动调用决定。" />
+                                                    <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="列表顺序就是测试步执行顺序；可使用上下箭头调整。" />
                                                 </StackPanel>
-                                                <TextBlock x:Name="InspectionItemsSemanticsText" Text="不设执行顺序，按各自触发条件独立调用" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
+                                                <TextBlock x:Name="InspectionItemsSemanticsText" Text="执行顺序：从上到下" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
                                                 <Border Background="{StaticResource GreenPaleBrush}" CornerRadius="3" Padding="9,4" VerticalAlignment="Center">
-                                                    <TextBlock Text="无序集合" FontSize="9" Foreground="{StaticResource GreenDarkBrush}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="顺序执行" FontSize="9" Foreground="{StaticResource GreenDarkBrush}" FontWeight="SemiBold" />
                                                 </Border>
                                                 <Button x:Name="AddInspectionItemButton" Width="74" Height="28" Margin="8,0,0,0"
                                                         Click="AddInspectionItem_Click" Padding="7,2"
                                                         Background="White" BorderBrush="{StaticResource GreenDarkBrush}"
                                                         Foreground="{StaticResource GreenDarkBrush}"
-                                                        ToolTip="加号：新增一个独立测试步，然后在右侧设置检测、判定和触发接口。">
+                                                        ToolTip="加号：在列表末尾新增测试步；新增后按当前列表顺序执行。">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center" />
                                                         <TextBlock Text="添加" Margin="6,0,0,0" FontWeight="SemiBold" FontSize="10" />
@@ -728,7 +770,7 @@
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="34" />
+                                                            <ColumnDefinition Width="102" />
                                                         </Grid.ColumnDefinitions>
                                                         <StackPanel Margin="2,0,8,0" VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -736,13 +778,19 @@
                                                                 <TextBlock Text="{Binding TypeLabel}" FontSize="9" Foreground="{StaticResource GreenDarkBrush}" />
                                                                 <TextBlock Text=" · " FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
                                                                 <TextBlock Text="{Binding RequiredLabel}" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                                                <TextBlock Text=" · " FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                                                <TextBlock Text="{Binding TriggerModeLabel}" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
                                                             </StackPanel>
                                                         </StackPanel>
-                                                        <Button Grid.Column="1" Content="&#xE738;" Style="{StaticResource IconButton}"
-                                                                CommandParameter="{Binding}" Click="RemoveInspectionItem_Click"
-                                                                ToolTip="减号：删除这个测试步" Foreground="#A33A32" />
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                            <Button Content="↑" Style="{StaticResource IconButton}" FontFamily="Segoe UI" FontSize="13"
+                                                                    CommandParameter="{Binding}" Click="MoveInspectionItemUp_Click"
+                                                                    ToolTip="上移：提前这个测试步的执行顺序" />
+                                                            <Button Content="↓" Style="{StaticResource IconButton}" FontFamily="Segoe UI" FontSize="13"
+                                                                    CommandParameter="{Binding}" Click="MoveInspectionItemDown_Click"
+                                                                    ToolTip="下移：延后这个测试步的执行顺序" />
+                                                            <Button Content="&#xE738;" Style="{StaticResource IconButton}"
+                                                                    CommandParameter="{Binding}" Click="RemoveInspectionItem_Click"
+                                                                    ToolTip="减号：删除这个测试步" Foreground="#A33A32" />
+                                                        </StackPanel>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
@@ -765,16 +813,12 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <StackPanel>
                                                 <TextBlock Text="当前测试步 · 基本信息" Style="{StaticResource SectionTitle}" />
-                                                <TextBlock Text="名称、检测类型和模型共同定义这个可调用功能。" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
+                                                <TextBlock Text="在这里设置名称、检测类型、模型，以及各 Label 的区域和判定。" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
                                             </StackPanel>
-                                            <Border Grid.Column="1" Background="#F3F5F4" CornerRadius="3" Padding="9,4" VerticalAlignment="Top">
-                                                <TextBlock Text="{Binding SelectedInspectionItem.FunctionCode, StringFormat=函数标识 {0}}" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                            </Border>
-                                            <Button x:Name="RemoveSelectedInspectionItemButton" Grid.Column="2" Width="30" Height="28" Margin="8,0,0,0"
+                                            <Button x:Name="RemoveSelectedInspectionItemButton" Grid.Column="1" Width="30" Height="28" Margin="8,0,0,0"
                                                     Content="&#xE738;" FontFamily="Segoe MDL2 Assets" FontSize="12"
                                                     Foreground="#A33A32" Padding="0" Click="RemoveSelectedInspectionItem_Click"
                                                     ToolTip="减号：删除右侧当前正在编辑的测试步。" />
@@ -782,7 +826,7 @@
 
                                         <StackPanel Grid.Row="1" Margin="0,13,0,0">
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                <TextBlock Text="测试步 / 函数名称" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="测试步名称" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                                 <TextBlock Style="{StaticResource RequiredStar}" />
                                                 <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="这是现场调用和日志中显示的功能名称，应能直接说明该测试步检查什么。" />
                                             </StackPanel>
@@ -800,12 +844,13 @@
                                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                                     <TextBlock Text="检测类型" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                                     <TextBlock Style="{StaticResource RequiredStar}" />
-                                                    <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="目标检测判断单张图中的目标和数量；姿态动作判断连续帧中的动作顺序。" />
+                                                    <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="目标检测与图像分割都按单张图配置 Label、整图/ROI 与判定条件；姿态动作判断连续帧中的动作顺序。" />
                                                 </StackPanel>
                                                 <ComboBox x:Name="InspectionTypeComboBox" Height="36" SelectedIndex="{Binding SelectedInspectionItem.TypeIndex, Mode=TwoWay}"
                                                           SelectionChanged="InspectionTypeComboBox_SelectionChanged">
                                                     <ComboBoxItem Content="目标检测（单张图）" />
                                                     <ComboBoxItem Content="姿态动作（连续帧）" />
+                                                    <ComboBoxItem Content="图像分割（单张图）" />
                                                 </ComboBox>
                                             </StackPanel>
                                             <StackPanel Grid.Column="2">
@@ -821,19 +866,114 @@
 
                                         <StackPanel Grid.Row="3" Margin="0,11,0,0">
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                <TextBlock Text="函数内部绑定模型" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="绑定模型" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                                 <TextBlock Style="{StaticResource RequiredStar}" />
                                                 <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="指定这一测试步实际调用哪个模型；不同测试步可以绑定不同模型。" />
                                             </StackPanel>
                                             <ComboBox x:Name="InspectionModelComboBox" Height="36"
-                                                      ItemsSource="{Binding Models}" DisplayMemberPath="Name"
-                                                      SelectedItem="{Binding SelectedInspectionItem.Model, Mode=TwoWay}" />
+                                                      ItemsSource="{Binding CompatibleInspectionModels}" DisplayMemberPath="Name"
+                                                      SelectedItem="{Binding SelectedInspectionItem.Model, Mode=OneWay}"
+                                                      SelectionChanged="InspectionModelComboBox_SelectionChanged"
+                                                      DropDownOpened="InspectionModelComboBox_DropDownOpened"
+                                                      DropDownClosed="InspectionModelComboBox_DropDownClosed" />
+                                            <TextBlock x:Name="InspectionModelStatusText"
+                                                       FontSize="9" Foreground="{StaticResource MutedTextBrush}"
+                                                       TextWrapping="Wrap" Margin="0,5,0,0" />
                                         </StackPanel>
 
-                                        <Border Grid.Row="4" Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1"
+                                        <StackPanel x:Name="NormalDetectionSetupPanel" Grid.Row="4" Margin="0,12,0,0">
+                                            <Border Background="#F8FCF9" BorderBrush="#B8DDBF" BorderThickness="1" CornerRadius="4" Padding="13">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Text="检测内容与判定条件" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
+                                                        <TextBlock Text="每个 Label 独立配置区域与判定；保存一个后可继续设置下一个。"
+                                                                   FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+                                                    </StackPanel>
+                                                    <Button x:Name="OpenDetectionEditorButton" Grid.Column="1" Content="+ 添加检测子项"
+                                                            Click="OpenDetectionEditor_Click" Padding="12,5"
+                                                            Background="White" BorderBrush="{StaticResource GreenDarkBrush}"
+                                                            Foreground="{StaticResource GreenDarkBrush}" />
+                                                </Grid>
+                                            </Border>
+                                            <ItemsControl x:Name="DetectionChildrenItemsControl"
+                                                          ItemsSource="{Binding SelectedInspectionItem.DetectionChildren}" Margin="0,8,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                                Padding="10" Margin="0,0,0,6" Background="White">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="120" />
+                                                                    <ColumnDefinition Width="150" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="70" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <StackPanel>
+                                                                    <TextBlock Text="Label" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                                                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,3,0,0" />
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="1">
+                                                                    <TextBlock Text="检测区域" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                                                                    <TextBlock Text="{Binding ScopeSummary}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="2">
+                                                                    <TextBlock Text="判定条件" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                                                                    <TextBlock Text="{Binding RuleSummary}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                                    <Button Content="&#xE70F;" Style="{StaticResource IconButton}"
+                                                                            CommandParameter="{Binding}" Click="EditDetectionChild_Click"
+                                                                            ToolTip="只重新编辑当前 Label，不影响其他检测子项。" />
+                                                                    <Button Content="&#xE738;" Style="{StaticResource IconButton}"
+                                                                            CommandParameter="{Binding}" Click="RemoveDetectionChild_Click" Foreground="#A33A32" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                        <Border x:Name="PoseBasicInfoHint" Grid.Row="4" Visibility="Collapsed"
+                                                Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1"
                                                 CornerRadius="4" Padding="11" Margin="0,12,0,0">
-                                            <TextBlock Text="使用上方页签继续设置当前测试步的检测内容、判定条件以及流水线触发接口。"
-                                                       Foreground="{StaticResource GreenDarkBrush}" FontSize="10" TextWrapping="Wrap" />
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Text="动作顺序摘要" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
+                                                        <TextBlock Text="首次选择姿态 / 时序模型时自动弹出配置；保存后在这里查看或重新编辑。"
+                                                                   Foreground="{StaticResource MutedTextBrush}" FontSize="9" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                    <Button x:Name="EditPoseActionsButton" Grid.Column="1" Content="重新编辑动作顺序"
+                                                            Click="OpenPoseActionEditor_Click" Padding="12,5" Margin="12,0,0,0"
+                                                            Background="White" BorderBrush="{StaticResource GreenDarkBrush}"
+                                                            Foreground="{StaticResource GreenDarkBrush}" />
+                                                </Grid>
+                                                <ItemsControl Grid.Row="1" ItemsSource="{Binding PoseSteps}" Margin="0,10,0,0">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="White" BorderBrush="#B8DDBF" BorderThickness="1"
+                                                                    CornerRadius="3" Padding="9,5" Margin="0,0,7,5">
+                                                                <TextBlock Text="{Binding DisplayLabel}" FontSize="10" Foreground="{StaticResource GreenDarkBrush}" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Grid>
                                         </Border>
 
                                     </Grid>
@@ -842,20 +982,26 @@
                         </Grid>
                     </ScrollViewer>
 
-                    <ScrollViewer x:Name="Step5Panel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Margin="0,54,0,0">
-                        <Grid Margin="34,24" Width="1000" HorizontalAlignment="Center">
+                    <Grid x:Name="Step5Panel" Visibility="Collapsed"
+                          Margin="0" Background="#8F26322D" Panel.ZIndex="90">
+                        <Grid Margin="28" Width="1000" HorizontalAlignment="Center" Background="White">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <TextBlock Text="设置当前测试步的检测内容" FontSize="20" FontWeight="SemiBold" />
-                            <Grid Grid.Row="1" Margin="0,9,0,18">
+                            <Grid Margin="24,20,24,0">
+                                <TextBlock Text="设置姿态动作顺序" FontSize="20" FontWeight="SemiBold" />
+                                <Button HorizontalAlignment="Right" Width="32" Height="32" Content="&#xE711;"
+                                        FontFamily="Segoe MDL2 Assets" Click="CancelPoseActionEditor_Click" />
+                            </Grid>
+                            <Grid Grid.Row="1" Margin="24,9,24,18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="系统已根据检测类型自动切换下面的设置，不需要理解无关参数。" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="按顺序配置动作，并为每个动作分别设置模型、Label、保持时间与最大等待。" Foreground="{StaticResource MutedTextBrush}" />
                                 <Border Grid.Column="1" Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1" CornerRadius="3" Padding="11,5">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="当前项：" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
@@ -890,26 +1036,26 @@
                                             <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="全图会统计整张图片；ROI 只统计手工框定坐标范围内的目标。" />
                                         </StackPanel>
                                         <Border Style="{StaticResource ChoiceCard}" BorderBrush="{StaticResource GreenDarkBrush}" BorderThickness="2" Background="{StaticResource GreenPaleBrush}" Margin="0,0,0,10">
-                                            <RadioButton x:Name="RoiRegionRadioButton" Content="只检测指定区域（ROI）"
+                                            <RadioButton x:Name="LegacyRoiRegionRadioButton" Content="只检测指定区域（ROI）"
                                                          IsChecked="{Binding SelectedInspectionItem.UseRoi, Mode=TwoWay}"
                                                          GroupName="DetectionArea" FontWeight="SemiBold"
                                                          Checked="DetectionRegion_Changed" />
                                         </Border>
                                         <Border Style="{StaticResource ChoiceCard}" Margin="0,0,0,14">
-                                            <RadioButton x:Name="FullImageRegionRadioButton" Content="检测整张图片"
+                                            <RadioButton x:Name="LegacyFullImageRegionRadioButton" Content="检测整张图片"
                                                          IsChecked="{Binding SelectedInspectionItem.UseFullImage, Mode=TwoWay}"
                                                          GroupName="DetectionArea" Checked="DetectionRegion_Changed" />
                                         </Border>
-                                        <Button x:Name="RedrawRoiButton" Content="重新框选区域" Style="{StaticResource WizardPrimaryButton}"
+                                        <Button x:Name="LegacyRedrawRoiButton" Content="重新框选区域" Style="{StaticResource WizardPrimaryButton}"
                                                 Click="RedrawRoiButton_Click"
                                                 ToolTip="点击后在右侧预览中按住鼠标左键拖动，松开后生成新的 ROI 坐标。" />
-                                        <TextBlock x:Name="RoiCoordinatesText" Text="X1 120  ·  Y1 80  ·  X2 520  ·  Y2 420"
+                                        <TextBlock x:Name="LegacyRoiCoordinatesText" Text="X1 120  ·  Y1 80  ·  X2 520  ·  Y2 420"
                                                    FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,11,0,0" TextWrapping="Wrap" />
                                         <TextBlock Text="参考坐标：640 × 480" FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
                                     </StackPanel>
                                 </Border>
                                 <Border Grid.Column="2" Style="{StaticResource PanelBorder}" Background="#EEF2F0" Padding="16">
-                                    <Grid x:Name="RoiPreviewSurface" Height="286" Background="Transparent" Cursor="Cross"
+                                    <Grid x:Name="LegacyRoiPreviewSurface" Height="286" Background="Transparent" Cursor="Cross"
                                           Focusable="True" ClipToBounds="True"
                                           Loaded="RoiPreviewSurface_Loaded"
                                           SizeChanged="RoiPreviewSurface_SizeChanged"
@@ -921,10 +1067,10 @@
                                         <TextBlock Text="图像预览" FontSize="10" Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Left" VerticalAlignment="Top" />
                                         <TextBlock Text="按住鼠标左键拖动框选 ROI" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                    Foreground="{StaticResource MutedTextBrush}" IsHitTestVisible="False" />
-                                        <Canvas x:Name="RoiOverlayCanvas" Background="Transparent" ClipToBounds="True">
-                                            <Rectangle x:Name="RoiSelectionRectangle" Stroke="{StaticResource GreenDarkBrush}" StrokeThickness="3"
+                                        <Canvas x:Name="LegacyRoiOverlayCanvas" Background="Transparent" ClipToBounds="True">
+                                            <Rectangle x:Name="LegacyRoiSelectionRectangle" Stroke="{StaticResource GreenDarkBrush}" StrokeThickness="3"
                                                        StrokeDashArray="6 3" Fill="#18FFFFFF" IsHitTestVisible="False" />
-                                            <Border x:Name="RoiSelectionLabel" Background="{StaticResource GreenDarkBrush}" Padding="8,4"
+                                            <Border x:Name="LegacyRoiSelectionLabel" Background="{StaticResource GreenDarkBrush}" Padding="8,4"
                                                     CornerRadius="2" IsHitTestVisible="False">
                                                 <TextBlock Text="fan 检测区域" Foreground="White" FontSize="9" />
                                             </Border>
@@ -933,9 +1079,11 @@
                                 </Border>
                             </Grid>
 
-                            <Border x:Name="PoseContentPanel" Grid.Row="2" Style="{StaticResource PanelBorder}" Padding="20" Visibility="Collapsed">
+                            <ScrollViewer Grid.Row="2" Margin="24,0" VerticalScrollBarVisibility="Auto">
+                            <Border x:Name="PoseContentPanel" Style="{StaticResource PanelBorder}" Padding="20" Visibility="Collapsed">
                                 <Grid>
                                     <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
@@ -998,10 +1146,81 @@
                                         <TextBlock Text="姿态动作依赖连续帧；动作在当前测试步内部按编号顺序执行，而测试步本身不参与全局排序。"
                                                    Foreground="#76550C" FontSize="10" TextWrapping="Wrap" />
                                     </Border>
+                                    <Border Grid.Row="3" Style="{StaticResource PanelBorder}" Background="#FBFCFB" Padding="16" Margin="0,14,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="当前动作参数" Style="{StaticResource SectionTitle}" />
+                                            <TextBlock Text="每个动作分别保存模型、Label、置信度、最短保持和最大等待。"
+                                                       FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,12" />
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="当前动作" Style="{StaticResource FieldLabel}" />
+                                                    <ComboBox Height="34" ItemsSource="{Binding PoseSteps}" DisplayMemberPath="DisplayLabel"
+                                                              SelectedIndex="{Binding SelectedInspectionItem.PoseActionIndex, Mode=TwoWay}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="动作模型" Style="{StaticResource FieldLabel}" />
+                                                    <ComboBox Height="34" ItemsSource="{Binding Models}" DisplayMemberPath="Name"
+                                                              SelectedItem="{Binding SelectedInspectionItem.SelectedPoseAction.Model, Mode=TwoWay}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="4">
+                                                    <TextBlock Text="动作条件 / Label" Style="{StaticResource FieldLabel}" />
+                                                    <TextBox Height="34" Padding="9,5"
+                                                             Text="{Binding SelectedInspectionItem.SelectedPoseAction.ActionCondition, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                </StackPanel>
+                                            </Grid>
+                                            <Grid Margin="0,12,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="置信度阈值" Style="{StaticResource FieldLabel}" />
+                                                    <TextBox Height="34" Padding="9,5"
+                                                             Text="{Binding SelectedInspectionItem.SelectedPoseAction.ConfidenceThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="最短保持（ms）" Style="{StaticResource FieldLabel}" />
+                                                    <TextBox Height="34" Padding="9,5"
+                                                             Text="{Binding SelectedInspectionItem.SelectedPoseAction.MinimumHoldMsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="4">
+                                                    <TextBlock Text="最大等待（ms）" Style="{StaticResource FieldLabel}" />
+                                                    <TextBox Height="34" Padding="9,5"
+                                                             Text="{Binding SelectedInspectionItem.SelectedPoseAction.MaximumWaitMsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                            </ScrollViewer>
+                            <Border Grid.Row="3" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+                                    Padding="24,14" Margin="0,18,0,0">
+                                <Grid>
+                                    <TextBlock x:Name="PoseActionEditorStatusText"
+                                               Text="按从左到右的顺序配置；保存后返回基本信息。"
+                                               FontSize="10" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button x:Name="CancelPoseActionEditorButton" Content="取消"
+                                                Click="CancelPoseActionEditor_Click" Margin="0,0,10,0" />
+                                        <Button x:Name="ApplyPoseActionEditorButton" Content="保存并返回基本信息"
+                                                Click="ApplyPoseActionEditor_Click" Style="{StaticResource WizardPrimaryButton}"
+                                                Padding="16,6" />
+                                    </StackPanel>
                                 </Grid>
                             </Border>
                         </Grid>
-                    </ScrollViewer>
+                    </Grid>
 
                     <ScrollViewer x:Name="Step6Panel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Margin="0,54,0,0">
                         <StackPanel Margin="34,24" Width="900" HorizontalAlignment="Center">
@@ -1019,6 +1238,7 @@
 
                             <StackPanel x:Name="TargetRulePanel">
                                 <Border Style="{StaticResource PanelBorder}" Padding="22">
+                                    <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -1050,6 +1270,10 @@
                                                 <ComboBoxItem Content="数量等于" />
                                                 <ComboBoxItem Content="数量范围" />
                                                 <ComboBoxItem Content="数量大于" />
+                                                <ComboBoxItem Content="数量不等于" />
+                                                <ComboBoxItem Content="数量大于等于" />
+                                                <ComboBoxItem Content="数量小于" />
+                                                <ComboBoxItem Content="数量小于等于" />
                                             </ComboBox>
                                         </StackPanel>
                                         <StackPanel Grid.Column="4">
@@ -1073,6 +1297,103 @@
                                             </StackPanel>
                                         </StackPanel>
                                     </Grid>
+                                    <Grid Margin="0,16,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="规则组合" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <ComboBox x:Name="RuleLogicalOperatorComboBox" Height="36"
+                                                      SelectedIndex="{Binding SelectedInspectionItem.RuleLogicalOperatorIndex, Mode=TwoWay}">
+                                                <ComboBoxItem Content="AND · 全部满足" />
+                                                <ComboBoxItem Content="OR · 任一满足" />
+                                            </ComboBox>
+                                            <TextBlock Text="统计语义" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,10,0,6" />
+                                            <ComboBox x:Name="PrimaryRuleMetricComboBox" Height="36"
+                                                      SelectedIndex="{Binding SelectedInspectionItem.RuleMetricIndex, Mode=TwoWay}">
+                                                <ComboBoxItem Content="Present Count" />
+                                                <ComboBoxItem Content="Missing Count" />
+                                                <ComboBoxItem Content="Presence" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Confidence" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <TextBox x:Name="PrimaryRuleConfidenceTextBox" Height="36" Padding="10,6"
+                                                     Text="{Binding SelectedInspectionItem.ConfidenceThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Text="条件满足时" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <ComboBox x:Name="PrimaryRuleOutcomeComboBox" Height="36"
+                                                      SelectedIndex="{Binding SelectedInspectionItem.RuleOutcomeIndex, Mode=TwoWay}">
+                                                <ComboBoxItem Content="Pass" />
+                                                <ComboBoxItem Content="Fail" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <Button x:Name="AddAdditionalRuleButton" Grid.Column="5" Content="+ 规则" Margin="12,20,0,0"
+                                                Click="AddAdditionalRule_Click" Padding="10,5" VerticalAlignment="Top" />
+                                    </Grid>
+                                    <ItemsControl x:Name="AdditionalRulesItemsControl"
+                                                  ItemsSource="{Binding SelectedInspectionItem.AdditionalRules}" Margin="0,14,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                        Padding="9" Margin="0,0,0,7" Background="#FBFCFB">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="120" />
+                                                            <ColumnDefinition Width="110" />
+                                                            <ColumnDefinition Width="90" />
+                                                            <ColumnDefinition Width="120" />
+                                                            <ColumnDefinition Width="70" />
+                                                            <ColumnDefinition Width="70" />
+                                                            <ColumnDefinition Width="76" />
+                                                            <ColumnDefinition Width="82" />
+                                                            <ColumnDefinition Width="34" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <ComboBox Height="30" Margin="3,0" ToolTip="规则使用的 Model Artifact"
+                                                                  ItemsSource="{Binding DataContext.Models, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  SelectedItem="{Binding Model, Mode=TwoWay}"
+                                                                  DisplayMemberPath="Name" />
+                                                        <ComboBox Grid.Column="1" Height="30" Margin="3,0" ToolTip="稳定 Label ID 对应的标签"
+                                                                  ItemsSource="{Binding Model.Labels}"
+                                                                  SelectedItem="{Binding TargetLabel, Mode=TwoWay}" />
+                                                        <ComboBox Grid.Column="2" Height="30" Margin="3,0" SelectedIndex="{Binding MetricIndex, Mode=TwoWay}">
+                                                            <ComboBoxItem Content="Present" />
+                                                            <ComboBoxItem Content="Missing" />
+                                                            <ComboBoxItem Content="Presence" />
+                                                        </ComboBox>
+                                                        <ComboBox Grid.Column="3" Height="30" Margin="3,0" SelectedIndex="{Binding RuleMethodIndex, Mode=TwoWay}">
+                                                            <ComboBoxItem Content="数量等于" />
+                                                            <ComboBoxItem Content="数量范围" />
+                                                            <ComboBoxItem Content="数量大于" />
+                                                            <ComboBoxItem Content="数量不等于" />
+                                                            <ComboBoxItem Content="数量大于等于" />
+                                                            <ComboBoxItem Content="数量小于" />
+                                                            <ComboBoxItem Content="数量小于等于" />
+                                                        </ComboBox>
+                                                        <TextBox Grid.Column="4" Height="30" Margin="3,0" Padding="7,4" ToolTip="Threshold"
+                                                                 Text="{Binding ThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                        <TextBox Grid.Column="5" Height="30" Margin="3,0" Padding="7,4" ToolTip="Upper Threshold（仅 BetweenInclusive 使用）"
+                                                                 Text="{Binding UpperThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                        <TextBox Grid.Column="6" Height="30" Margin="3,0" Padding="7,4" ToolTip="Confidence"
+                                                                 Text="{Binding ConfidenceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                        <ComboBox Grid.Column="7" Height="30" Margin="3,0" SelectedIndex="{Binding OutcomeIndex, Mode=TwoWay}">
+                                                            <ComboBoxItem Content="Pass" />
+                                                            <ComboBoxItem Content="Fail" />
+                                                        </ComboBox>
+                                                        <Button Grid.Column="8" Content="&#xE738;" Style="{StaticResource IconButton}"
+                                                                CommandParameter="{Binding}" Click="RemoveAdditionalRule_Click" Foreground="#A33A32" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    </StackPanel>
                                 </Border>
                                 <Border Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1" CornerRadius="4" Padding="22" Margin="0,18,0,0">
                                     <StackPanel>
@@ -1086,6 +1407,7 @@
 
                             <StackPanel x:Name="PoseRulePanel" Visibility="Collapsed">
                                 <Border Style="{StaticResource PanelBorder}" Padding="22">
+                                    <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -1112,7 +1434,7 @@
                                                 <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="动作需要连续满足这么久才算完成，用于过滤偶发误识别。" />
                                             </StackPanel>
                                             <TextBox x:Name="PoseHoldTimeTextBox" Height="36" Padding="10,6"
-                                                     Text="{Binding SelectedInspectionItem.PoseHoldTimeText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     Text="{Binding SelectedInspectionItem.SelectedPoseAction.MinimumHoldMsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                      TextChanged="RequiredField_TextChanged" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="4">
@@ -1122,10 +1444,35 @@
                                                 <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="超过该时间仍未完成当前动作时，这个姿态测试步判定失败。" />
                                             </StackPanel>
                                             <TextBox x:Name="PoseMaxWaitTextBox" Height="36" Padding="10,6"
-                                                     Text="{Binding SelectedInspectionItem.PoseMaxWaitText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     Text="{Binding SelectedInspectionItem.SelectedPoseAction.MaximumWaitMsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                      TextChanged="RequiredField_TextChanged" />
                                         </StackPanel>
                                     </Grid>
+                                    <Grid Margin="0,16,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="动作 Model" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <ComboBox Height="36" ItemsSource="{Binding Models}" DisplayMemberPath="Name"
+                                                      SelectedItem="{Binding SelectedInspectionItem.SelectedPoseAction.Model, Mode=TwoWay}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="动作条件 / Label" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <TextBox Height="36" Padding="10,6"
+                                                     Text="{Binding SelectedInspectionItem.SelectedPoseAction.ActionCondition, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Text="Confidence" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <TextBox x:Name="PoseConfidenceTextBox" Height="36" Padding="10,6"
+                                                     Text="{Binding SelectedInspectionItem.SelectedPoseAction.ConfidenceThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    </StackPanel>
                                 </Border>
                                 <Border Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1" CornerRadius="4" Padding="22" Margin="0,18,0,0">
                                     <StackPanel>
@@ -1141,6 +1488,107 @@
 
                     <ScrollViewer x:Name="Step8Panel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Margin="0,54,0,0">
                         <StackPanel Margin="34,20" Width="980" HorizontalAlignment="Center">
+                            <StackPanel>
+                                 <TextBlock Text="设置当前测试步的自定义函数" FontSize="20" FontWeight="SemiBold" />
+                                 <TextBlock Text="每个测试步单独配置；本轮只保留函数入口与延时参数的前端界面。"
+                                            Foreground="{StaticResource MutedTextBrush}" Margin="0,8,0,18" />
+                                <Border Style="{StaticResource PanelBorder}" Padding="14" Margin="0,0,0,16" Background="#FBFCFB">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="320" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="当前测试步" FontWeight="SemiBold" />
+                                            <TextBlock Text="可直接切换测试步；每个测试步的函数配置分别保存。"
+                                                       FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,18,0" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="CustomFunctionStepComboBox" Grid.Column="1" Height="36"
+                                                  ItemsSource="{Binding InspectionItems}" DisplayMemberPath="Name"
+                                                  SelectedItem="{Binding SelectedInspectionItem, Mode=OneWay}"
+                                                  SelectionChanged="CustomFunctionStepComboBox_SelectionChanged" />
+                                    </Grid>
+                                </Border>
+                                 <Border Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1"
+                                         CornerRadius="4" Padding="16" Margin="0,0,0,16">
+                                    <StackPanel>
+                                        <TextBlock Text="自定义函数摘要" FontSize="10" Foreground="{StaticResource GreenDarkBrush}" />
+                                        <TextBlock x:Name="CustomFunctionSummaryText"
+                                                   Text="{Binding SelectedInspectionItem.FunctionContractSummary}"
+                                                   FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}"
+                                                   Margin="0,8,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource PanelBorder}" Padding="22">
+                                    <StackPanel>
+                                        <TextBlock Text="函数入口" Style="{StaticResource SectionTitle}" />
+                                        <Grid Margin="0,14,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="210" />
+                                                <ColumnDefinition Width="16" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="16" />
+                                                <ColumnDefinition Width="170" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="函数类型" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox x:Name="CustomFunctionTypeComboBox" Height="36"
+                                                          SelectedIndex="{Binding SelectedInspectionItem.CustomFunctionTypeIndex, Mode=TwoWay}">
+                                                    <ComboBoxItem Content="Python 文件" />
+                                                    <ComboBoxItem Content="内置函数（后续提供）" />
+                                                    <ComboBoxItem Content="预留函数（后续提供）" />
+                                                </ComboBox>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <TextBlock Text="函数名称" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Style="{StaticResource RequiredStar}" />
+                                                </StackPanel>
+                                                <TextBox x:Name="CustomFunctionNameTextBox" Height="36" Padding="10,6"
+                                                         Text="{Binding SelectedInspectionItem.CustomFunctionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         TextChanged="RequiredField_TextChanged" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="4">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                    <TextBlock Text="延时（ms）" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                    <TextBlock Style="{StaticResource RequiredStar}" />
+                                                </StackPanel>
+                                                <TextBox x:Name="CustomFunctionDelayTextBox" Height="36" Padding="10,6"
+                                                         Text="{Binding SelectedInspectionItem.CustomFunctionDelayMsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         TextChanged="RequiredField_TextChanged" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Grid Margin="0,14,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="函数文件 / 路径" Style="{StaticResource FieldLabel}" />
+                                                <TextBox x:Name="CustomFunctionFileTextBox" Height="36" Padding="10,6"
+                                                         Text="{Binding SelectedInspectionItem.CustomFunctionFilePath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         TextChanged="RequiredField_TextChanged" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="选择文件" Click="SelectCustomFunctionFile_Click"
+                                                    Margin="12,20,0,0" VerticalAlignment="Top" />
+                                        </Grid>
+                                        <StackPanel Margin="0,14,0,0">
+                                            <TextBlock Text="说明" Style="{StaticResource FieldLabel}" />
+                                            <TextBox Height="72" Padding="10,7" AcceptsReturn="True" TextWrapping="Wrap"
+                                                     Text="{Binding SelectedInspectionItem.CustomFunctionDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#FFF8EC" BorderBrush="#E6D2A8" BorderThickness="1" CornerRadius="4" Padding="15" Margin="0,14,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="当前开发边界" FontWeight="SemiBold" Foreground="#76550D" />
+                                        <TextBlock Text="这里只建立自定义函数的概念和配置界面。Python 执行、安全隔离、函数签名以及工厂方现成函数均留待后续资料确认后开发。"
+                                                   Foreground="#76550D" FontSize="10" TextWrapping="Wrap" Margin="0,6,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <StackPanel Visibility="Collapsed">
                             <TextBlock Text="定义当前测试步的触发与运行接口" FontSize="20" FontWeight="SemiBold" />
                             <TextBlock Text="把检测功能封装成可调用模块：可由测试序列调用，也可等待 PLC、IO 或传感器信号。"
                                        Foreground="{StaticResource MutedTextBrush}" Margin="0,8,0,18" />
@@ -1166,17 +1614,21 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                <TextBlock Text="调用方式" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                                <TextBlock Text="允许的调用入口（可多选）" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                                 <TextBlock Style="{StaticResource RequiredStar}" />
                                                 <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="序列调用表示由 Test Sequence 发起，但不规定当前测试步列表中的排列顺序；外部信号用于接 PLC、IO 或传感器；手动调用用于调试。" />
                                             </StackPanel>
-                                            <ComboBox x:Name="TriggerModeComboBox" Height="36"
-                                                      SelectedIndex="{Binding SelectedInspectionItem.TriggerModeIndex, Mode=TwoWay}"
-                                                      SelectionChanged="TriggerMode_SelectionChanged">
-                                                <ComboBoxItem Content="由测试序列调用" />
-                                                <ComboBoxItem Content="等待外部信号（PLC / IO / 传感器）" />
-                                                <ComboBoxItem Content="由操作员或调试工具手动调用" />
-                                            </ComboBox>
+                                            <StackPanel>
+                                                <CheckBox x:Name="AllowSequenceInvocationCheckBox" Content="Test Sequence 调用"
+                                                          IsChecked="{Binding SelectedInspectionItem.AllowSequenceInvocation, Mode=TwoWay}"
+                                                          Checked="TriggerEntry_Changed" Unchecked="TriggerEntry_Changed" Margin="0,0,0,5" />
+                                                <CheckBox x:Name="ExternalTriggerEnabledCheckBox" Content="外部信号（PLC / IO / 传感器）"
+                                                          IsChecked="{Binding SelectedInspectionItem.ExternalTriggerEnabled, Mode=TwoWay}"
+                                                          Checked="TriggerEntry_Changed" Unchecked="TriggerEntry_Changed" Margin="0,0,0,5" />
+                                                <CheckBox x:Name="AllowManualDebugInvocationCheckBox" Content="操作员 / 调试工具手动调用"
+                                                          IsChecked="{Binding SelectedInspectionItem.AllowManualDebugInvocation, Mode=TwoWay}"
+                                                          Checked="TriggerEntry_Changed" Unchecked="TriggerEntry_Changed" />
+                                            </StackPanel>
                                         </StackPanel>
 
                                         <Grid x:Name="ExternalTriggerFieldsPanel" Grid.Column="2" Visibility="Collapsed">
@@ -1258,32 +1710,54 @@
                                         </StackPanel>
                                     </Grid>
 
+                                    <Grid Margin="0,14,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="最大并发" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <TextBox Height="36" Padding="10,6"
+                                                     Text="{Binding SelectedInspectionItem.MaxConcurrencyText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="队列容量" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <TextBox Height="36" Padding="10,6"
+                                                     Text="{Binding SelectedInspectionItem.QueueCapacityText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Text="队列满策略" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,6" />
+                                            <ComboBox Height="36" SelectedIndex="{Binding SelectedInspectionItem.OverflowPolicyIndex, Mode=TwoWay}">
+                                                <ComboBoxItem Content="拒绝最新请求" />
+                                                <ComboBoxItem Content="丢弃最旧请求" />
+                                                <ComboBoxItem Content="等待队列空间" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+
                                     <StackPanel Margin="0,14,0,0">
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                            <TextBlock Text="运行时图源" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Text="帧输入策略" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                             <TextBlock Style="{StaticResource RequiredStar}" />
                                             <TextBlock Style="{StaticResource InfoGlyph}" ToolTip="继承序列图源适合固定工位；外部上下文供未来触发适配器传入帧；操作员选择仅用于调试。" />
                                         </StackPanel>
-                                        <ComboBox x:Name="RuntimeSourceComboBox" Height="36"
-                                                  SelectedIndex="{Binding SelectedInspectionItem.RuntimeSourceIndex, Mode=TwoWay}"
+                                        <ComboBox x:Name="FrameInputPolicyComboBox" Height="36"
+                                                  SelectedIndex="{Binding SelectedInspectionItem.FrameInputPolicyIndex, Mode=TwoWay}"
                                                   SelectionChanged="RequiredSelection_Changed">
-                                            <ComboBoxItem Content="继承本测试序列图源" />
-                                            <ComboBoxItem Content="由外部触发上下文提供图像 / 帧" />
-                                            <ComboBoxItem Content="允许操作员在调试时选择图源" />
+                                            <ComboBoxItem Content="每个工件采集一次" />
+                                            <ComboBoxItem Content="每次调用采集" />
+                                            <ComboBoxItem Content="连续帧" />
+                                            <ComboBoxItem Content="外部上下文帧" />
+                                            <ComboBoxItem Content="调试时选择图源（Production 禁止）" />
                                         </ComboBox>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#FFF8EC" BorderBrush="#E6D2A8" BorderThickness="1" CornerRadius="4" Padding="15" Margin="0,14,0,0">
-                                <StackPanel>
-                                    <TextBlock Text="接口边界" FontWeight="SemiBold" Foreground="#76550D" />
-                                    <TextBlock Text="本页定义可由 C# Trigger Adapter 消费的前端契约。当前评审版尚未读取真实 PLC、IO、传感器或消息总线，也不会保存点位配置。"
-                                               Foreground="#76550D" FontSize="10" TextWrapping="Wrap" Margin="0,6,0,0" />
-                                </StackPanel>
-                            </Border>
-                            <CheckBox x:Name="PublishAfterValidationCheckBox" Content="全部测试步校验通过后发布为现场版本" IsChecked="True" Margin="0,14,0,0"
-                                      ToolTip="业务接入后，此选项作用于整个测试序列，不会单独发布某一个测试步。" />
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -1305,23 +1779,24 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="项目与序列" FontWeight="SemiBold" /><TextBlock Text="Fan 风扇检测 · V2.0" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="图源" FontWeight="SemiBold" /><TextBlock Text="图片文件夹 · 24 张" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="模型与标签" FontWeight="SemiBold" /><TextBlock Text="{Binding Models.Count, StringFormat={}{0} 个模型}" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="测试步 / 函数" FontWeight="SemiBold" /><TextBlock x:Name="ReviewTestBlocksSummaryText" Text="3 个 · 2 个必选" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="项目与版本" FontWeight="SemiBold" /><TextBlock Text="{Binding Editor.ProjectSummary}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="图源" FontWeight="SemiBold" /><TextBlock Text="{Binding Editor.SourceSummary}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="模型" FontWeight="SemiBold" /><TextBlock x:Name="ReviewModelsSummaryText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="测试步数量" FontWeight="SemiBold" /><TextBlock x:Name="ReviewTestBlocksSummaryText" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="测试步执行顺序（从上到下）" FontWeight="SemiBold" /><TextBlock x:Name="ReviewInspectionOrderText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="检测类型" FontWeight="SemiBold" /><TextBlock Text="目标检测 2 · 姿态动作 1" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="目标条件" FontWeight="SemiBold" /><TextBlock Text="ROI · 数量等于 1" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="姿态顺序" FontWeight="SemiBold" /><TextBlock Text="取件 → 放置 → 按压到位" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="触发接口" FontWeight="SemiBold" /><TextBlock x:Name="ReviewTriggerSummaryText" Text="序列调用 2 · 外部信号 1" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
-                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="运行参数" FontWeight="SemiBold" /><TextBlock x:Name="ReviewRuntimeSummaryText" Text="逐测试步独立配置" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><Grid><TextBlock Text="测试步内容" FontWeight="SemiBold" /><TextBlock x:Name="ReviewTriggerSummaryText" HorizontalAlignment="Right" Foreground="{StaticResource MutedTextBrush}" /></Grid></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="自定义函数" FontWeight="SemiBold" /><TextBlock x:Name="ReviewCustomFunctionDetailsText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="序列号与启动" FontWeight="SemiBold" /><TextBlock Text="支持人工输入、扫码枪或二维码识别；必须先录入序列号，再点击开始；每个序列号只检测一个产品 / 一张图片。" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="运行结果显示" FontWeight="SemiBold" /><TextBlock Text="保留检测框和 ROI；画面不显示模型标签与置信度文字；统计名称使用“合格率”。" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+                                    <Border Style="{StaticResource SummaryRow}"><StackPanel><TextBlock Text="前端开发边界" FontWeight="SemiBold" /><TextBlock Text="视频、Python 执行、扫码设备、工厂序列号格式与最终日志格式仍待后续功能阶段接入；当前先保证单序列号、单件、单图并写入基础日志字段。" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
                                 </StackPanel>
                             </Grid>
-                            <Border x:Name="PrototypeStatusBorder" Grid.Row="3" Visibility="Collapsed"
+                            <Border x:Name="CompletionStatusBorder" Grid.Row="3" Visibility="Collapsed"
                                     Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1"
                                     CornerRadius="4" Padding="16" Margin="0,14,0,0">
-                                <TextBlock Text="界面流程已走完。当前仅记录前端确认状态，不会写入项目配置。"
+                                <TextBlock Text="前端配置检查已完成；如需修改，可点击顶部步骤返回。"
                                            Foreground="{StaticResource GreenDarkBrush}" FontWeight="SemiBold" />
                             </Border>
                         </Grid>
@@ -1332,13 +1807,400 @@
 
         <Border Grid.Row="3" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid Margin="22,0">
-                <TextBlock x:Name="FooterHintText" Text="前端确认阶段：输入内容不会保存，也不会改变 V1 配置。"
+                <TextBlock x:Name="FooterHintText" Text="当前只确认前端界面；功能开发将在界面确认后开始。"
                            FontSize="10" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel x:Name="WizardNavigationPanel" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Button x:Name="PreviousButton" Content="上一步" Click="PreviousButton_Click" Margin="0,0,10,0" />
                     <Button x:Name="NextButton" Content="下一步：选择图源" Click="NextButton_Click" Style="{StaticResource WizardPrimaryButton}" MinWidth="150" />
                 </StackPanel>
             </Grid>
         </Border>
+
+        <Grid x:Name="DetectionEditorOverlay" Grid.RowSpan="4" Panel.ZIndex="100" Visibility="Collapsed"
+              Background="#8F26322D">
+            <Border Width="860" MaxHeight="760" Margin="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="White" BorderBrush="#819089" BorderThickness="1" CornerRadius="6">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="72" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="66" />
+                    </Grid.RowDefinitions>
+
+                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="22,0">
+                        <Grid>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="选择检测 Label" FontSize="18" FontWeight="SemiBold" />
+                                <TextBlock Text="选择一个 Label 后立即进入它自己的区域与判定配置；保存后再继续下一个。"
+                                           FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
+                            </StackPanel>
+                            <Button HorizontalAlignment="Right" Width="32" Height="32" Content="&#xE711;"
+                                    FontFamily="Segoe MDL2 Assets" Click="CloseDetectionEditor_Click"
+                                    ToolTip="完成并关闭 Label 选择" />
+                        </Grid>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalContentAlignment="Stretch" Padding="22,18">
+                        <StackPanel>
+                            <Border Style="{StaticResource PanelBorder}" Padding="16" Background="#FBFCFB">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="检测模型" FontWeight="SemiBold" />
+                                        <TextBlock Text="来自当前测试步的基本信息" FontSize="9"
+                                                   Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <Border Grid.Column="1" Height="36" Padding="11,0"
+                                            Background="#F4F7F5" BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1" CornerRadius="3">
+                                        <TextBlock Text="{Binding SelectedInspectionItem.Model.Name}"
+                                                   VerticalAlignment="Center" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource GreenDarkBrush}" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <Grid Margin="0,18,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="逐个配置 Label" FontSize="15" FontWeight="SemiBold" />
+                                    <TextBlock Text="点选一项会打开独立弹窗；每次保存只新增或更新这一项。"
+                                               FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+                                </StackPanel>
+                                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="{StaticResource GreenPaleBrush}"
+                                        BorderBrush="#B8DDBF" BorderThickness="1" CornerRadius="12" Padding="10,4">
+                                    <TextBlock Text="{Binding DetectionEditor.SelectedLabelSummary}" FontSize="9"
+                                               Foreground="{StaticResource GreenDarkBrush}" FontWeight="SemiBold" />
+                                </Border>
+                            </Grid>
+
+                            <ItemsControl ItemsSource="{Binding DetectionEditor.LabelOptions}" HorizontalAlignment="Stretch">
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button CommandParameter="{Binding}" Click="OpenDetectionLabelEditor_Click"
+                                                Background="Transparent" BorderThickness="0" Padding="0"
+                                                Width="780" HorizontalAlignment="Center" HorizontalContentAlignment="Stretch" Margin="0,0,0,8">
+                                            <Border Width="780" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4"
+                                                    Padding="14,12" Background="#FBFCFB">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="32" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="105" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox IsChecked="{Binding IsConfigured, Mode=OneWay}" IsHitTestVisible="False"
+                                                              VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                    <StackPanel Grid.Column="1" Margin="8,0,14,0">
+                                                        <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" />
+                                                        <StackPanel Margin="0,5,0,0">
+                                                            <StackPanel.Style>
+                                                                <Style TargetType="StackPanel">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsConfigured}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </StackPanel.Style>
+                                                            <TextBlock Text="{Binding ScopeSummary}" FontSize="9"
+                                                                       Foreground="{StaticResource GreenDarkBrush}" />
+                                                            <TextBlock Text="{Binding RuleSummary}" FontSize="9"
+                                                                       Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                        <TextBlock Text="{Binding ConfigurationStatus}" FontSize="9" HorizontalAlignment="Right">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsConfigured}" Value="True">
+                                                                            <Setter Property="Foreground" Value="{StaticResource GreenDarkBrush}" />
+                                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding ConfigurationAction}" FontSize="10" FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource GreenDarkBrush}" Margin="0,4,0,0" HorizontalAlignment="Right" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="22,0">
+                        <Grid>
+                            <TextBlock x:Name="DetectionEditorStatusText"
+                                       Text="请选择一个 Label 进入独立配置。" FontSize="10"
+                                       Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                            <Button Content="完成" Click="CloseDetectionEditor_Click" HorizontalAlignment="Right"
+                                    VerticalAlignment="Center" Style="{StaticResource WizardPrimaryButton}" Padding="22,6" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid x:Name="DetectionLabelEditorOverlay" Grid.RowSpan="4" Panel.ZIndex="110" Visibility="Collapsed"
+              Background="#9626322D">
+            <Border Width="1140" MaxHeight="760" Margin="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Background="White" BorderBrush="#819089" BorderThickness="1" CornerRadius="6">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="72" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="66" />
+                    </Grid.RowDefinitions>
+
+                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="22,0">
+                        <Grid>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock FontSize="18" FontWeight="SemiBold">
+                                    <Run Text="配置 Label · " />
+                                    <Run Text="{Binding DetectionEditor.ActiveLabel.Label, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock Text="区域和判定条件只属于当前 Label；保存后回到列表继续配置其他 Label。"
+                                           FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,5,0,0" />
+                            </StackPanel>
+                            <Button HorizontalAlignment="Right" Width="32" Height="32" Content="&#xE711;"
+                                    FontFamily="Segoe MDL2 Assets" Click="CancelDetectionLabelEditor_Click"
+                                    ToolTip="取消当前 Label 的未保存修改" />
+                        </Grid>
+                    </Border>
+
+                     <Grid Grid.Row="1" Margin="22,18">
+                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition x:Name="DetectionLabelRegionColumn" Width="3*" />
+                            <ColumnDefinition x:Name="DetectionLabelGapColumn" Width="18" />
+                            <ColumnDefinition x:Name="DetectionLabelRuleColumn" Width="2*" />
+                        </Grid.ColumnDefinitions>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
+                            <StackPanel>
+                                <Border Style="{StaticResource PanelBorder}" Padding="16" Background="#FBFCFB">
+                                    <StackPanel>
+                                        <TextBlock Text="1 · 当前 Label 检测整张图吗？" FontSize="14" FontWeight="SemiBold" />
+                                        <TextBlock Text="默认检测整张图；选择“否”后再显示 ROI 配置。"
+                                                   FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,10" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <RadioButton x:Name="FullImageRegionRadioButton" Content="是，检测整张图（默认）"
+                                                         GroupName="DetectionLabelScope"
+                                                         IsChecked="{Binding DetectionEditor.ActiveLabel.UseFullImage, Mode=TwoWay}"
+                                                         Checked="DetectionArea_Changed" Margin="0,0,28,0" />
+                                            <RadioButton x:Name="RoiRegionRadioButton" Content="否，选择 ROI"
+                                                         GroupName="DetectionLabelScope"
+                                                         IsChecked="{Binding DetectionEditor.ActiveLabel.UseRoi, Mode=TwoWay}"
+                                                         Checked="DetectionArea_Changed" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <StackPanel Margin="0,12,0,0">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DetectionEditor.ActiveLabel.UseRoi}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+
+                                    <Border Style="{StaticResource PanelBorder}" Padding="16">
+                                        <StackPanel>
+                                            <TextBlock Text="2 · 为当前 Label 选择区域" FontSize="14" FontWeight="SemiBold" />
+                                            <TextBlock Text="每个 Label 独立保存区域；条件相同时可同时勾选多个 ROI。"
+                                                       FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,10" />
+                                            <ItemsControl ItemsSource="{Binding DetectionEditor.ActiveLabel.RoiOptions}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                     <DataTemplate>
+                                                         <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                  Checked="DetectionRoiSelection_Changed"
+                                                                  Unchecked="DetectionRoiSelection_Changed"
+                                                                  Margin="0,0,18,8" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <Border Background="#FFF8EC" BorderBrush="#E6D2A8" BorderThickness="1"
+                                                    CornerRadius="3" Padding="10" Margin="0,4,0,0">
+                                                <TextBlock Text="固定摄像头提示：ROI 仅适用于机位固定、画面位置稳定的场景。"
+                                                           FontSize="9" Foreground="#76550D" TextWrapping="Wrap" />
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource PanelBorder}" Padding="16" Margin="0,12,0,0">
+                                        <StackPanel>
+                                            <Grid>
+                                                <StackPanel>
+                                                    <TextBlock Text="命名 ROI" FontWeight="SemiBold" />
+                                                    <TextBlock Text="选择一个命名区域后，可在下方拖动重新框选。"
+                                                               FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,0" />
+                                                </StackPanel>
+                                                <Button HorizontalAlignment="Right" Content="+ 新建区域" Click="AddNamedRoi_Click"
+                                                        Padding="10,4" VerticalAlignment="Center" />
+                                            </Grid>
+                                            <ListBox x:Name="NamedRoisListBox" ItemsSource="{Binding SelectedInspectionItem.NamedRois}"
+                                                     BorderThickness="0" Background="Transparent" Margin="0,10,0,8"
+                                                     SelectionChanged="NamedRoisListBox_SelectionChanged">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                                Padding="9" Margin="0,0,0,5" Background="White">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="105" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="34" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding CoordinateSummary}" FontSize="9"
+                                                                           Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                                                                <Button Grid.Column="2" Content="&#xE738;" Style="{StaticResource IconButton}"
+                                                                        CommandParameter="{Binding}" Click="RemoveNamedRoi_Click" Foreground="#A33A32" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                            <Grid x:Name="RoiPreviewSurface" Height="190" Background="#EEF2F0" Cursor="Cross"
+                                                  Focusable="True" ClipToBounds="True"
+                                                  Loaded="RoiPreviewSurface_Loaded" SizeChanged="RoiPreviewSurface_SizeChanged"
+                                                  MouseLeftButtonDown="RoiPreviewSurface_MouseLeftButtonDown"
+                                                  MouseMove="RoiPreviewSurface_MouseMove"
+                                                  MouseLeftButtonUp="RoiPreviewSurface_MouseLeftButtonUp"
+                                                  LostMouseCapture="RoiPreviewSurface_LostMouseCapture">
+                                                <TextBlock Text="按住鼠标左键拖动框选当前 ROI" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           Foreground="{StaticResource MutedTextBrush}" IsHitTestVisible="False" />
+                                                <Canvas x:Name="RoiOverlayCanvas" Background="Transparent" ClipToBounds="True">
+                                                    <Rectangle x:Name="RoiSelectionRectangle" Stroke="{StaticResource GreenDarkBrush}" StrokeThickness="3"
+                                                               StrokeDashArray="6 3" Fill="#18FFFFFF" IsHitTestVisible="False" />
+                                                    <Border x:Name="RoiSelectionLabel" Background="{StaticResource GreenDarkBrush}" Padding="8,4"
+                                                            CornerRadius="2" IsHitTestVisible="False">
+                                                        <TextBlock Text="{Binding SelectedNamedRoi.Name}" Foreground="White" FontSize="9" />
+                                                    </Border>
+                                                </Canvas>
+                                            </Grid>
+                                            <Grid Margin="0,8,0,0">
+                                                <TextBlock x:Name="RoiCoordinatesText" Text="X1 120  ·  Y1 80  ·  X2 520  ·  Y2 420"
+                                                           FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                                                <Button x:Name="RedrawRoiButton" Content="重新框选" Click="RedrawRoiButton_Click"
+                                                        HorizontalAlignment="Right" Padding="9,3"
+                                                        ToolTip="在上方预览中拖动，更新当前选中的命名 ROI。" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <Border x:Name="DetectionLabelRulePanel" Grid.Column="2" Style="{StaticResource PanelBorder}" Padding="18" Background="#FBFCFB">
+                            <StackPanel>
+                                     <TextBlock Text="当前 Label 的判定条件" FontSize="15" FontWeight="SemiBold" />
+                                     <TextBlock Text="字段布局共用，但这里填写的值只保存给当前 Label。"
+                                                FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,14" />
+
+                                    <Border Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                            CornerRadius="3" Padding="11" Margin="0,0,0,14">
+                                        <StackPanel>
+                                            <TextBlock Text="检测区域" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock x:Name="DetectionLabelScopeSummaryText"
+                                                       Text="{Binding DetectionEditor.ActiveLabel.ScopeSummary}"
+                                                       FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <TextBlock Text="统计内容" Style="{StaticResource FieldLabel}" Margin="0,0,0,6" />
+                                    <ComboBox Height="36" SelectedIndex="{Binding DetectionEditor.MetricIndex, Mode=TwoWay}">
+                                        <ComboBoxItem Content="识别数量" />
+                                        <ComboBoxItem Content="缺失数量" />
+                                        <ComboBoxItem Content="是否存在" />
+                                    </ComboBox>
+
+                                    <TextBlock Text="判断方式" Style="{StaticResource FieldLabel}" Margin="0,14,0,6" />
+                                    <ComboBox Height="36" SelectedIndex="{Binding DetectionEditor.RuleMethodIndex, Mode=TwoWay}">
+                                        <ComboBoxItem Content="等于（=）" />
+                                        <ComboBoxItem Content="范围（含边界）" />
+                                        <ComboBoxItem Content="大于（&gt;）" />
+                                        <ComboBoxItem Content="不等于（!=）" />
+                                        <ComboBoxItem Content="大于等于（&gt;=）" />
+                                        <ComboBoxItem Content="小于（&lt;）" />
+                                        <ComboBoxItem Content="小于等于（&lt;=）" />
+                                    </ComboBox>
+
+                                    <TextBlock Text="数量 / 下限" Style="{StaticResource FieldLabel}" Margin="0,14,0,6" />
+                                    <TextBox Height="36" Padding="10,6"
+                                             Text="{Binding DetectionEditor.ThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <StackPanel Margin="0,14,0,0">
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DetectionEditor.RuleMethodIndex}" Value="1">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
+                                        <TextBlock Text="上限" Style="{StaticResource FieldLabel}" Margin="0,0,0,6" />
+                                        <TextBox Height="36" Padding="10,6"
+                                                 Text="{Binding DetectionEditor.UpperThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="置信度阈值" Style="{StaticResource FieldLabel}" Margin="0,14,0,6" />
+                                    <TextBox Height="36" Padding="10,6"
+                                             Text="{Binding DetectionEditor.ConfidenceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock Text="条件满足时" Style="{StaticResource FieldLabel}" Margin="0,14,0,6" />
+                                    <ComboBox Height="36" SelectedIndex="{Binding DetectionEditor.OutcomeIndex, Mode=TwoWay}">
+                                        <ComboBoxItem Content="Pass" />
+                                        <ComboBoxItem Content="Fail" />
+                                    </ComboBox>
+
+                                    <Border Background="{StaticResource GreenPaleBrush}" BorderBrush="#B8DDBF" BorderThickness="1"
+                                            CornerRadius="4" Padding="14" Margin="0,18,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="当前 Label 判定预览" FontSize="9" Foreground="{StaticResource GreenDarkBrush}" />
+                                            <TextBlock Text="{Binding DetectionEditor.RuleSummary}" FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource GreenDarkBrush}" TextWrapping="Wrap" Margin="0,7,0,0" />
+                                        </StackPanel>
+                                    </Border>
+                            </StackPanel>
+                         </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="22,0">
+                        <Grid>
+                            <TextBlock x:Name="DetectionLabelEditorStatusText" Text="请完成当前 Label 的区域与判定设置。"
+                                       FontSize="10" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Button Content="取消" Click="CancelDetectionLabelEditor_Click" Margin="0,0,10,0" />
+                                <Button x:Name="ApplyDetectionLabelEditorButton" Content="保存当前 Label"
+                                        Click="ApplyDetectionLabelEditor_Click" Style="{StaticResource WizardPrimaryButton}" Padding="18,6" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

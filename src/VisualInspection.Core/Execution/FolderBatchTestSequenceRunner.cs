@@ -39,31 +39,7 @@ public sealed class FolderBatchTestSequenceRunner(IDelayProvider? delayProvider 
         IProgress<FolderBatchImageRunResult>? imageCompleted = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(project);
-        ArgumentNullException.ThrowIfNull(sequence);
-        ArgumentNullException.ThrowIfNull(imageSource);
-        ArgumentNullException.ThrowIfNull(inspectionProvider);
-
-        var enabledItems = sequence.Items
-            .Where(item => item.Enabled)
-            .OrderBy(item => item.Order)
-            .ToArray();
-        if (enabledItems.Length == 0)
-        {
-            throw new InvalidDataException("当前测试序列中没有已启用的测试项。");
-        }
-
-        if (enabledItems.Any(item => item.Type != TestItemType.Normal))
-        {
-            throw new NotSupportedException("文件夹逐图批量测试当前只支持普通检测项；姿态时序仍按连续帧执行。");
-        }
-
-        var sourceDefinition = project.InputSources.FirstOrDefault(source => source.Id == sequence.InputSourceId)
-            ?? throw new InvalidDataException("测试序列引用的图源不存在。");
-        if (sourceDefinition.Type != InputSourceType.Folder)
-        {
-            throw new InvalidOperationException("文件夹批量执行器只能用于文件夹图源。");
-        }
+        var enabledItems = ValidateAndGetEnabledItems(project, sequence, imageSource, inspectionProvider);
 
         var batchId = Guid.NewGuid();
         var startedAt = DateTimeOffset.UtcNow;
@@ -87,13 +63,12 @@ public sealed class FolderBatchTestSequenceRunner(IDelayProvider? delayProvider 
                     break;
                 }
 
-                await using var sharedFrameSource = new RepeatedFrameImageSource(frame, enabledItems.Length);
-                var cachedProvider = new SingleFrameCachingInspectionProvider(inspectionProvider, frame);
-                var runResult = await _sequenceRunner.RunAsync(
+                var runResult = await RunFrameAsync(
                     project,
                     sequence,
-                    sharedFrameSource,
-                    cachedProvider,
+                    frame,
+                    enabledItems.Length,
+                    inspectionProvider,
                     progress,
                     cancellationToken);
                 var imageResult = new FolderBatchImageRunResult
@@ -147,6 +122,98 @@ public sealed class FolderBatchTestSequenceRunner(IDelayProvider? delayProvider 
             WasStopped = wasStopped,
             Summary = summary
         };
+    }
+
+    public async Task<FolderBatchImageRunResult> RunSingleAsync(
+        ProjectConfiguration project,
+        TestSequenceDefinition sequence,
+        IImageSource imageSource,
+        IInspectionProvider inspectionProvider,
+        IProgress<TestRunUpdate>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var enabledItems = ValidateAndGetEnabledItems(project, sequence, imageSource, inspectionProvider);
+        await imageSource.OpenAsync(cancellationToken);
+        try
+        {
+            var totalFileCount = imageSource.Progress.TotalCount;
+            var frame = await imageSource.ReadAsync(cancellationToken)
+                ?? throw new InvalidDataException("文件夹图源中没有可读取的图片。");
+            var runResult = await RunFrameAsync(
+                project,
+                sequence,
+                frame,
+                enabledItems.Length,
+                inspectionProvider,
+                progress,
+                cancellationToken);
+            return new FolderBatchImageRunResult
+            {
+                SourceIndex = imageSource.Progress.CurrentIndex,
+                TotalFileCount = totalFileCount,
+                FrameOrigin = frame.Origin,
+                RunResult = runResult
+            };
+        }
+        finally
+        {
+            await imageSource.CloseAsync(CancellationToken.None);
+        }
+    }
+
+    private async Task<TestRunResult> RunFrameAsync(
+        ProjectConfiguration project,
+        TestSequenceDefinition sequence,
+        ImageFrame frame,
+        int enabledItemCount,
+        IInspectionProvider inspectionProvider,
+        IProgress<TestRunUpdate>? progress,
+        CancellationToken cancellationToken)
+    {
+        await using var sharedFrameSource = new RepeatedFrameImageSource(frame, enabledItemCount);
+        var cachedProvider = new SingleFrameCachingInspectionProvider(inspectionProvider, frame);
+        return await _sequenceRunner.RunAsync(
+            project,
+            sequence,
+            sharedFrameSource,
+            cachedProvider,
+            progress,
+            cancellationToken);
+    }
+
+    private static TestItemDefinition[] ValidateAndGetEnabledItems(
+        ProjectConfiguration project,
+        TestSequenceDefinition sequence,
+        IImageSource imageSource,
+        IInspectionProvider inspectionProvider)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(sequence);
+        ArgumentNullException.ThrowIfNull(imageSource);
+        ArgumentNullException.ThrowIfNull(inspectionProvider);
+
+        var enabledItems = sequence.Items
+            .Where(item => item.Enabled)
+            .OrderBy(item => item.Order)
+            .ToArray();
+        if (enabledItems.Length == 0)
+        {
+            throw new InvalidDataException("当前测试序列中没有已启用的测试项。");
+        }
+
+        if (enabledItems.Any(item => item.Type != TestItemType.Normal))
+        {
+            throw new NotSupportedException("文件夹图片测试当前只支持普通检测项；姿态时序仍按连续帧执行。");
+        }
+
+        var sourceDefinition = project.InputSources.FirstOrDefault(source => source.Id == sequence.InputSourceId)
+            ?? throw new InvalidDataException("测试序列引用的图源不存在。");
+        if (sourceDefinition.Type != InputSourceType.Folder)
+        {
+            throw new InvalidOperationException("文件夹图片执行器只能用于文件夹图源。");
+        }
+
+        return enabledItems;
     }
 
     private static InspectionVerdict GetBatchVerdict(

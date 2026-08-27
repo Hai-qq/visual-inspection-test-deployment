@@ -8,11 +8,47 @@
         Title="视觉检测测试部署系统"
         Width="1440" Height="900" MinWidth="1120" MinHeight="720"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style x:Key="OperatorActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinHeight" Value="48" />
+            <Setter Property="Padding" Value="14,9" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#425149" BlurRadius="2" ShadowDepth="2" Opacity="0.22" />
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect Color="#425149" BlurRadius="1" ShadowDepth="0" Opacity="0.14" />
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="OperatorPrimaryActionButton" TargetType="Button" BasedOn="{StaticResource OperatorActionButton}">
+            <Setter Property="Background" Value="{StaticResource GreenDarkBrush}" />
+            <Setter Property="BorderBrush" Value="#1B672D" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style x:Key="OperatorStopActionButton" TargetType="Button" BasedOn="{StaticResource OperatorActionButton}">
+            <Setter Property="Background" Value="#FFF3F3" />
+            <Setter Property="BorderBrush" Value="#D99A97" />
+            <Setter Property="Foreground" Value="{StaticResource FailBrush}" />
+        </Style>
+    </Window.Resources>
+
     <Grid Background="{StaticResource CanvasBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="56" />
+            <RowDefinition Height="68" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="96" />
+            <RowDefinition Height="110" />
         </Grid.RowDefinitions>
 
         <!-- Application header -->
@@ -25,26 +61,26 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="8" Height="30" Background="{StaticResource GreenBrush}" CornerRadius="1" />
+                    <Border Width="8" Height="36" Background="{StaticResource GreenBrush}" CornerRadius="1" />
                     <StackPanel Margin="10,0,0,0">
-                        <TextBlock Text="视觉检测" FontSize="14" FontWeight="SemiBold" />
-                        <TextBlock Text="测试部署系统 · 操作员工作台" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                        <TextBlock Text="视觉检测" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="测试部署系统 · 操作员工作台" FontSize="12" Foreground="{StaticResource MutedTextBrush}" />
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <StackPanel Margin="0,0,36,0">
-                        <TextBlock Text="项目" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                        <TextBlock Text="{Binding ProjectName}" FontSize="12" FontWeight="SemiBold" />
+                        <TextBlock Text="项目" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                        <TextBlock Text="{Binding ProjectName}" FontSize="14" FontWeight="SemiBold" />
                     </StackPanel>
                     <StackPanel Margin="0,0,36,0">
-                        <TextBlock Text="测试序列" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                        <TextBlock Text="{Binding SequenceName}" FontSize="12" FontWeight="SemiBold" />
+                        <TextBlock Text="测试序列" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                        <TextBlock Text="{Binding SequenceName}" FontSize="14" FontWeight="SemiBold" />
                     </StackPanel>
                     <StackPanel>
-                        <TextBlock Text="图像源" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                        <TextBlock Text="图像源" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding SourceName}" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Text="{Binding SourceStateText}" FontSize="9" FontWeight="Bold" Margin="8,2,0,0">
+                            <TextBlock Text="{Binding SourceName}" FontSize="14" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding SourceStateText}" FontSize="11" FontWeight="Bold" Margin="8,2,0,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
@@ -59,19 +95,16 @@
                         </StackPanel>
                     </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="测试序列设置 V2" Click="SequenceSettings_Click" IsEnabled="{Binding CanOpenSettings}"
+                <StackPanel x:Name="HeaderAdminActionsPanel" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="SequenceSettingsButton" Content="测试序列设置 V2" Click="SequenceSettings_Click" IsEnabled="{Binding CanOpenSettings}"
                             Visibility="{Binding SettingsVisibility}" Margin="0,0,8,0"
-                            Padding="10,5" FontSize="9" />
-                    <Button Content="图源设置" Click="InputSourceSettings_Click" IsEnabled="{Binding CanOpenSettings}"
-                            Visibility="{Binding SettingsVisibility}" Margin="0,0,14,0"
-                            Padding="10,5" FontSize="9" />
+                            Padding="12,6" FontSize="11" />
                     <Border Background="{StaticResource GreenPaleBrush}" Padding="8,4" CornerRadius="2" Margin="0,0,12,0">
-                        <TextBlock Text="{Binding RoleName}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
+                        <TextBlock Text="{Binding RoleName}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
                     </Border>
                     <StackPanel>
-                        <TextBlock Text="{Binding UserName}" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding CurrentTime}" HorizontalAlignment="Right" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                        <TextBlock Text="{Binding UserName}" HorizontalAlignment="Right" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding CurrentTime}" HorizontalAlignment="Right" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -80,26 +113,26 @@
         <!-- Operator workspace: sequence + image + statistics -->
         <Grid Grid.Row="1" Margin="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="288" />
                 <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="360" />
+                <ColumnDefinition Width="384" />
             </Grid.ColumnDefinitions>
 
             <!-- Test sequence -->
             <Border Grid.Column="0" Style="{StaticResource PanelBorder}">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="54" />
+                        <RowDefinition Height="58" />
                         <RowDefinition Height="*" />
-                        <RowDefinition Height="114" />
+                        <RowDefinition Height="224" />
                     </Grid.RowDefinitions>
                     <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,0">
                         <Grid>
-                            <TextBlock Text="测试序列" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                            <TextBlock Text="测试序列" Style="{StaticResource SectionTitle}" FontSize="15" VerticalAlignment="Center" />
                             <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="{StaticResource GreenPaleBrush}" Padding="7,3" CornerRadius="9">
-                                <TextBlock Text="{Binding ItemCountText}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
+                                <TextBlock Text="{Binding ItemCountText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
                             </Border>
                         </Grid>
                     </Border>
@@ -108,7 +141,7 @@
                         <ItemsControl ItemsSource="{Binding Sequence}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                                    <Border Padding="14,13" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="White" />
@@ -121,17 +154,17 @@
                                         </Border.Style>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="30" />
+                                                <ColumnDefinition Width="38" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Width="22" Height="22" CornerRadius="11" VerticalAlignment="Top"
+                                            <Border Width="28" Height="28" CornerRadius="14" VerticalAlignment="Top"
                                                     Background="{Binding ResultBrush}">
-                                                <TextBlock Text="{Binding Number}" Foreground="White" FontSize="10"
+                                                <TextBlock Text="{Binding Number}" Foreground="White" FontSize="12"
                                                            FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                             </Border>
                                             <StackPanel Grid.Column="1">
-                                                <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding ResultText}" FontSize="9" FontWeight="Bold" Margin="0,5,0,0"
+                                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding ResultText}" FontSize="11" FontWeight="Bold" Margin="0,6,0,0"
                                                            Foreground="{Binding ResultBrush}" />
                                             </StackPanel>
                                         </Grid>
@@ -143,7 +176,10 @@
 
                     <Grid Grid.Row="2" Margin="12">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="8" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="8" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
@@ -151,11 +187,51 @@
                             <ColumnDefinition Width="8" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Row="0" Grid.ColumnSpan="3" Content="开始测试" Command="{Binding StartCommand}"
-                                Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" />
-                        <Button Grid.Row="1" Grid.Column="0" Content="停止" Command="{Binding StopCommand}"
-                                Style="{StaticResource DangerButton}" />
-                        <Button Grid.Row="1" Grid.Column="2" Content="复位" Command="{Binding ResetCommand}" />
+                        <Border Grid.Row="0" Grid.ColumnSpan="3" Background="#F6F8F7" BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="4" Padding="10,8">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="产品序列号" FontSize="11" FontWeight="SemiBold" />
+                                    <TextBlock Text="人工 / 扫码枪 / 二维码" HorizontalAlignment="Right" FontSize="9"
+                                               Foreground="{StaticResource MutedTextBrush}" />
+                                </Grid>
+                                <TextBox x:Name="SerialNumberInputTextBox" Height="32" Margin="0,6,0,0" Padding="8,4"
+                                         Text="{Binding SerialNumberInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         IsReadOnly="{Binding IsRunning}"
+                                         AutomationProperties.HelpText="必须先录入序列号；每次点击开始只检测一个产品和一张图片。" />
+                                <TextBlock Text="{Binding SerialNumberStatusText}" FontSize="9" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}" />
+                            </StackPanel>
+                        </Border>
+                        <Button x:Name="StartActionButton" Grid.Row="2" Grid.ColumnSpan="3" Command="{Binding StartCommand}"
+                                Style="{StaticResource OperatorPrimaryActionButton}"
+                                AutomationProperties.Name="开始">
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="16" Height="16" Margin="0,0,9,0">
+                                    <Path Data="M 2,1 L 15,8 L 2,15 Z" Fill="White" />
+                                </Viewbox>
+                                <TextBlock x:Name="StartActionText" Text="开始" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="StopActionButton" Grid.Row="4" Grid.Column="0" Command="{Binding StopCommand}"
+                                Style="{StaticResource OperatorStopActionButton}" AutomationProperties.Name="停止">
+                            <StackPanel Orientation="Horizontal">
+                                <Rectangle Width="13" Height="13" RadiusX="1" RadiusY="1"
+                                           Fill="{StaticResource FailBrush}" Margin="0,0,8,0" />
+                                <TextBlock x:Name="StopActionText" Text="停止" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ResetActionButton" Grid.Row="4" Grid.Column="2" Command="{Binding ResetCommand}"
+                                Style="{StaticResource OperatorActionButton}" AutomationProperties.Name="复位">
+                            <StackPanel Orientation="Horizontal">
+                                <Viewbox Width="17" Height="17" Margin="0,0,8,0">
+                                    <Path Data="M 14,5 A 6,6 0 1 0 15,10 M 14,5 L 14,1 M 14,5 L 10,5"
+                                          Stroke="{StaticResource TextBrush}" StrokeThickness="1.8"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                </Viewbox>
+                                <TextBlock x:Name="ResetActionText" Text="复位" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </Grid>
             </Border>
@@ -165,7 +241,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="12" />
-                    <RowDefinition Height="126" />
+                    <RowDefinition Height="176" />
                 </Grid.RowDefinitions>
                 <Border Style="{StaticResource PanelBorder}" Background="#E8EDEB" ClipToBounds="True">
                     <Grid>
@@ -192,20 +268,20 @@
                         <Image Source="{Binding CurrentImage}" Stretch="Uniform" Margin="12" />
 
                         <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14"
-                                Background="#EAF5F0" BorderBrush="#BCDCCE" BorderThickness="1" Padding="10,7" CornerRadius="3">
+                                Background="#EAF5F0" BorderBrush="#BCDCCE" BorderThickness="1" Padding="12,9" CornerRadius="3">
                             <StackPanel>
-                                <TextBlock Text="当前图像源" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding SourceName}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
-                                <TextBlock Text="{Binding InputSourceStatus}" FontSize="9" Foreground="{StaticResource MutedTextBrush}"
+                                <TextBlock Text="当前图像源" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding SourceName}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
+                                <TextBlock Text="{Binding InputSourceStatus}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
                                            MaxWidth="300" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Border>
 
                         <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="14" Background="#CC23342D" Padding="9,6" CornerRadius="2">
-                            <TextBlock Text="验收模式 · 640 × 360" Foreground="White" FontSize="10" />
+                            <TextBlock Text="验收模式 · 640 × 360" Foreground="White" FontSize="12" />
                         </Border>
                         <TextBlock Text="已采集图像 · ROI / 检测框叠加" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                   Margin="0,0,0,14" Foreground="{StaticResource MutedTextBrush}" FontSize="10" />
+                                   Margin="0,0,0,14" Foreground="{StaticResource MutedTextBrush}" FontSize="12" />
                     </Grid>
                 </Border>
 
@@ -215,21 +291,25 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="190" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="当前检测项" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                            <TextBlock Text="{Binding CurrentItemName}" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,8" />
-                            <TextBlock Text="{Binding CurrentStandard}"
-                                       FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding CurrentMeasured}"
-                                       FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding CurrentExecutionDetails}"
-                                       FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
+                        <ScrollViewer x:Name="CurrentItemDetailsScrollViewer"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Margin="0,0,4,0" Padding="0,0,6,0">
+                            <StackPanel VerticalAlignment="Top">
+                                <TextBlock Text="当前检测项" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding CurrentItemName}" FontSize="22" FontWeight="SemiBold" Margin="0,4,0,8" />
+                                <TextBlock Text="{Binding CurrentStandard}"
+                                           FontSize="13" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CurrentMeasured}"
+                                           FontSize="13" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CurrentExecutionDetails}"
+                                           FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </ScrollViewer>
                         <Border Grid.Column="1" Background="{StaticResource GreenPaleBrush}" BorderBrush="#B7DACC"
                                 BorderThickness="1" CornerRadius="4" Margin="14,0,0,0">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="结果" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding CurrentResult}" FontSize="28" FontWeight="Bold" Foreground="{Binding CurrentResultBrush}" />
+                                <TextBlock Text="结果" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding CurrentResult}" FontSize="32" FontWeight="Bold" Foreground="{Binding CurrentResultBrush}" />
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -240,17 +320,17 @@
             <Border Grid.Column="4" Style="{StaticResource PanelBorder}">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="54" />
-                        <RowDefinition Height="96" />
-                        <RowDefinition Height="44" />
+                        <RowDefinition Height="58" />
+                        <RowDefinition Height="104" />
+                        <RowDefinition Height="48" />
                         <RowDefinition Height="*" />
-                        <RowDefinition Height="72" />
+                        <RowDefinition Height="78" />
                     </Grid.RowDefinitions>
                     <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,0">
                         <Grid>
-                            <TextBlock Text="全局统计" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+                            <TextBlock Text="全局统计" Style="{StaticResource SectionTitle}" FontSize="15" VerticalAlignment="Center" />
                             <TextBlock Text="当前会话" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                       FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
+                                       FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                         </Grid>
                     </Border>
 
@@ -263,35 +343,35 @@
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Background="#EDF8F3" CornerRadius="3" Padding="10">
                             <StackPanel>
-                                <TextBlock Text="有效总数" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding Statistics.TotalCount}" FontSize="22" FontWeight="SemiBold" />
+                                <TextBlock Text="有效总数" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding Statistics.TotalCount}" FontSize="24" FontWeight="SemiBold" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="1" Background="#EDF8F3" CornerRadius="3" Padding="10" Margin="6,0,0,0">
                             <StackPanel>
-                                <TextBlock Text="通过" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding Statistics.PassCount}" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
+                                <TextBlock Text="通过" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding Statistics.PassCount}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="2" Background="#FFF1F1" CornerRadius="3" Padding="10" Margin="6,0,0,0">
                             <StackPanel>
-                                <TextBlock Text="不通过" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding Statistics.FailCount}" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource FailBrush}" />
+                                <TextBlock Text="不通过" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding Statistics.FailCount}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource FailBrush}" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="3" Background="#FFF6E9" CornerRadius="3" Padding="10" Margin="6,0,0,0">
                             <StackPanel>
-                                <TextBlock Text="错误" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding Statistics.ErrorCount}" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}" />
+                                <TextBlock Text="错误" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding Statistics.ErrorCount}" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource WarningBrush}" />
                             </StackPanel>
                         </Border>
                     </Grid>
 
                     <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1" Padding="16,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="显示方式" FontSize="9" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,14,0" VerticalAlignment="Center" />
-                            <RadioButton Content="数量" GroupName="StatisticsMode" IsChecked="{Binding Statistics.IsCountMode}" />
-                            <RadioButton Content="比率" GroupName="StatisticsMode" IsChecked="{Binding Statistics.IsRateMode}" />
+                            <TextBlock Text="显示方式" FontSize="11" Foreground="{StaticResource MutedTextBrush}" Margin="0,0,14,0" VerticalAlignment="Center" />
+                            <RadioButton Content="数量" FontSize="12" GroupName="StatisticsMode" IsChecked="{Binding Statistics.IsCountMode}" />
+                            <RadioButton x:Name="QualificationRateModeRadioButton" Content="合格率" FontSize="12" GroupName="StatisticsMode" IsChecked="{Binding Statistics.IsRateMode}" />
                         </StackPanel>
                     </Border>
 
@@ -302,21 +382,21 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
-                            <TextBlock Text="检测结果数量" FontSize="10" FontWeight="SemiBold" />
+                            <TextBlock Text="检测结果数量" FontSize="12" FontWeight="SemiBold" />
                             <StackPanel Grid.Row="1" Margin="0,16,0,0">
-                                <TextBlock Text="通过" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="通过" FontSize="12" Foreground="{StaticResource MutedTextBrush}" />
                                 <Grid Height="28" Margin="0,7,0,12" HorizontalAlignment="Left">
                                     <Border Width="256" Height="14" Background="#E2EAE6" CornerRadius="2" HorizontalAlignment="Left" />
                                     <Border Width="{Binding Statistics.PassBarWidth}" Height="14" Background="{StaticResource GreenBrush}"
                                             CornerRadius="2" HorizontalAlignment="Left" />
-                                    <TextBlock Text="{Binding Statistics.PassCount}" FontSize="11" FontWeight="SemiBold" Margin="266,-1,0,0" />
+                                    <TextBlock Text="{Binding Statistics.PassCount}" FontSize="13" FontWeight="SemiBold" Margin="266,-2,0,0" />
                                 </Grid>
-                                <TextBlock Text="不通过" FontSize="10" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="不通过" FontSize="12" Foreground="{StaticResource MutedTextBrush}" />
                                 <Grid Height="28" Margin="0,7,0,8" HorizontalAlignment="Left">
                                     <Border Width="256" Height="14" Background="#E2EAE6" CornerRadius="2" HorizontalAlignment="Left" />
                                     <Border Width="{Binding Statistics.FailBarWidth}" Height="14" Background="{StaticResource FailBrush}"
                                             CornerRadius="2" HorizontalAlignment="Left" />
-                                    <TextBlock Text="{Binding Statistics.FailCount}" FontSize="11" FontWeight="SemiBold" Margin="266,-1,0,0" />
+                                    <TextBlock Text="{Binding Statistics.FailCount}" FontSize="13" FontWeight="SemiBold" Margin="266,-2,0,0" />
                                 </Grid>
                             </StackPanel>
 
@@ -327,7 +407,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock Text="通过 / 不通过分布" FontSize="10" FontWeight="SemiBold" />
+                                    <TextBlock Text="通过 / 不通过分布" FontSize="12" FontWeight="SemiBold" />
                                     <Grid Grid.Row="1" Margin="0,10,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="3*" />
@@ -342,19 +422,19 @@
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
                                                 <Rectangle Width="10" Height="10" Fill="{StaticResource GreenBrush}" Margin="0,2,7,0" />
-                                                <TextBlock FontSize="10">
+                                                <TextBlock FontSize="12">
                                                     <Run Text="通过  " />
                                                     <Run Text="{Binding Statistics.PassCount, Mode=OneWay}" FontWeight="SemiBold" />
                                                 </TextBlock>
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal">
                                                 <Rectangle Width="10" Height="10" Fill="{StaticResource FailBrush}" Margin="0,2,7,0" />
-                                                <TextBlock FontSize="10">
+                                                <TextBlock FontSize="12">
                                                     <Run Text="不通过  " />
                                                     <Run Text="{Binding Statistics.FailCount, Mode=OneWay}" FontWeight="SemiBold" />
                                                 </TextBlock>
                                             </StackPanel>
-                                            <TextBlock Text="错误不计入饼图" FontSize="9" Foreground="{StaticResource MutedTextBrush}"
+                                            <TextBlock Text="错误不计入饼图" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
                                                        TextWrapping="Wrap" Margin="0,16,0,0" />
                                         </StackPanel>
                                     </Grid>
@@ -363,15 +443,15 @@
                         </Grid>
 
                         <StackPanel Visibility="{Binding Statistics.IsRateMode, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <TextBlock Text="通过 / 不通过比率" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                            <TextBlock x:Name="QualificationRateTitleText" Text="合格率" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" />
                             <controls:DonutChart Width="230" Height="230" Margin="0,22,0,14"
                                                  PassRate="{Binding Statistics.PassRate}"
                                                  CenterText="{Binding Statistics.PassRateText}" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <Rectangle Width="9" Height="9" Fill="{StaticResource GreenBrush}" Margin="0,0,6,0" />
-                                <TextBlock Text="通过" FontSize="10" Margin="0,0,20,0" />
+                                <TextBlock Text="通过" FontSize="12" Margin="0,0,20,0" />
                                 <Rectangle Width="9" Height="9" Fill="{StaticResource FailBrush}" Margin="0,0,6,0" />
-                                <TextBlock Text="不通过" FontSize="10" />
+                                <TextBlock Text="不通过" FontSize="12" />
                             </StackPanel>
                         </StackPanel>
                     </Grid>
@@ -379,12 +459,12 @@
                     <Border Grid.Row="4" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
                         <Grid>
                             <StackPanel>
-                                <TextBlock Text="有效检测" FontSize="9" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding Statistics.ValidCount}" FontSize="18" FontWeight="SemiBold" />
+                                <TextBlock Text="有效检测" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock Text="{Binding Statistics.ValidCount}" FontSize="20" FontWeight="SemiBold" />
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Right">
-                                <TextBlock Text="错误统计口径" FontSize="9" Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Right" />
-                                <TextBlock Text="不计入通过率" FontSize="11" Foreground="{StaticResource WarningBrush}" />
+                                <TextBlock Text="错误统计口径" FontSize="11" Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Right" />
+                                <TextBlock Text="不计入合格率" FontSize="13" Foreground="{StaticResource WarningBrush}" />
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -400,18 +480,18 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Ellipse Width="7" Height="7" Fill="#4CC89B" Margin="0,0,8,0" />
-                    <TextBlock Text="{Binding StatusText}" Foreground="#EAF2EE" FontSize="10" />
+                    <Ellipse Width="8" Height="8" Fill="#4CC89B" Margin="0,0,8,0" />
+                    <TextBlock Text="{Binding StatusText}" Foreground="#EAF2EE" FontSize="12" />
                 </StackPanel>
                 <TextBlock Text="{Binding RuntimeStatus}"
-                           HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#AABCB4" FontSize="10" />
+                           HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="#AABCB4" FontSize="12" />
                 <Border Grid.Row="1" BorderBrush="#3E5149" BorderThickness="0,1,0,0" Padding="0,5,0,3" ClipToBounds="True">
                     <Grid>
-                        <TextBlock Text="实时日志" Foreground="#8FA39A" FontSize="9" FontWeight="SemiBold" VerticalAlignment="Top" />
-                        <ItemsControl ItemsSource="{Binding Logs}" Margin="66,0,430,0">
+                        <TextBlock Text="实时日志" Foreground="#8FA39A" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Top" />
+                        <ItemsControl ItemsSource="{Binding Logs}" Margin="78,0,430,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Foreground="#D9E5DF" FontSize="9" TextTrimming="CharacterEllipsis" Margin="0,0,0,2">
+                                    <TextBlock Foreground="#D9E5DF" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,0,3">
                                         <Run Text="{Binding TimeText, Mode=OneWay}" Foreground="#8FA39A" />
                                         <Run Text="  [" /><Run Text="{Binding LevelText, Mode=OneWay}" /><Run Text="]  " />
                                         <Run Text="{Binding Message, Mode=OneWay}" />
@@ -420,8 +500,8 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Width="410">
-                            <TextBlock Text="日志文件" Foreground="#8FA39A" FontSize="8" HorizontalAlignment="Right" />
-                            <TextBlock Text="{Binding LogFilePath}" Foreground="#70857B" FontSize="8"
+                            <TextBlock Text="日志文件" Foreground="#8FA39A" FontSize="10" HorizontalAlignment="Right" />
+                            <TextBlock Text="{Binding LogFilePath}" Foreground="#70857B" FontSize="9"
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Stretch" TextAlignment="Right" />
                         </StackPanel>
                     </Grid>

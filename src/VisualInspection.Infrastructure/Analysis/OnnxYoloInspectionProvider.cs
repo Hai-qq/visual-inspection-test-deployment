@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using SkiaSharp;
 using VisualInspection.Core.Analysis;
 using VisualInspection.Core.Configuration;
 using VisualInspection.Core.Imaging;
@@ -60,7 +59,7 @@ public sealed class OnnxYoloInspectionProvider : IInspectionProvider, IDisposabl
         {
             foreach (var plan in plans)
             {
-                runtimes.Add(new ModelRuntime(plan));
+                runtimes.Add(new ModelRuntime(plan, new SkiaFramePreprocessor()));
             }
 
             return new OnnxYoloInspectionProvider(runtimes);
@@ -246,9 +245,11 @@ public sealed class OnnxYoloInspectionProvider : IInspectionProvider, IDisposabl
         private readonly int _inputWidth;
         private readonly IReadOnlyDictionary<int, IReadOnlyList<DetectionBinding>> _bindingsByClass;
         private readonly IReadOnlyDictionary<int, double> _minimumConfidenceByClass;
+        private readonly IFramePreprocessor _preprocessor;
 
-        public ModelRuntime(ModelPlan plan)
+        public ModelRuntime(ModelPlan plan, IFramePreprocessor preprocessor)
         {
+            _preprocessor = preprocessor;
             var options = OnnxModelContractInspector.CreateSessionOptions();
             try
             {
@@ -291,14 +292,16 @@ public sealed class OnnxYoloInspectionProvider : IInspectionProvider, IDisposabl
 
         public IReadOnlyList<TargetDetection> Infer(ImageFrame frame)
         {
-            var (tensor, transform) = CreateInputTensor(frame, _inputWidth, _inputHeight);
+            var preprocessed = _preprocessor.Preprocess(frame, _inputWidth, _inputHeight);
+            var tensor = new DenseTensor<float>([1, 3, _inputHeight, _inputWidth]);
+            preprocessed.NchwRgb01.AsSpan().CopyTo(tensor.Buffer.Span);
             var input = NamedOnnxValue.CreateFromTensor(_inputName, tensor);
             using var results = _session.Run([input], [_outputName]);
             var output = results.First().AsTensor<float>();
             var parsed = OnnxYoloEndToEndOutputParser.Parse(
                 output.ToArray(),
                 output.Dimensions.ToArray(),
-                transform,
+                preprocessed.Transform,
                 _minimumConfidenceByClass);
 
             return parsed.SelectMany(detection => _bindingsByClass[detection.ClassId].Select(binding =>
@@ -316,68 +319,6 @@ public sealed class OnnxYoloInspectionProvider : IInspectionProvider, IDisposabl
 
         public void Dispose() => _session.Dispose();
 
-        private static (DenseTensor<float> Tensor, LetterboxTransform Transform) CreateInputTensor(
-            ImageFrame frame,
-            int inputWidth,
-            int inputHeight)
-        {
-            using var decoded = SKBitmap.Decode(frame.Data.ToArray())
-                ?? throw new InvalidDataException($"无法解码输入图像：{frame.Origin ?? "未知来源"}。");
-            if (decoded.Width != frame.Width || decoded.Height != frame.Height)
-            {
-                throw new InvalidDataException(
-                    $"图像头尺寸 {frame.Width}×{frame.Height} 与解码尺寸 {decoded.Width}×{decoded.Height} 不一致。");
-            }
-
-            var scale = Math.Min((double)inputWidth / decoded.Width, (double)inputHeight / decoded.Height);
-            var resizedWidth = Math.Max(1, (int)Math.Round(decoded.Width * scale));
-            var resizedHeight = Math.Max(1, (int)Math.Round(decoded.Height * scale));
-            var padLeft = (int)Math.Round((inputWidth - resizedWidth) / 2d - 0.1d);
-            var padTop = (int)Math.Round((inputHeight - resizedHeight) / 2d - 0.1d);
-
-            var info = new SKImageInfo(inputWidth, inputHeight, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-            using var letterboxed = new SKBitmap(info);
-            using (var canvas = new SKCanvas(letterboxed))
-            using (var paint = new SKPaint { IsAntialias = true })
-            {
-                canvas.Clear(new SKColor(114, 114, 114, 255));
-                canvas.DrawBitmap(
-                    decoded,
-                    new SKRect(padLeft, padTop, padLeft + resizedWidth, padTop + resizedHeight),
-                    new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None),
-                    paint);
-                canvas.Flush();
-            }
-
-            var tensor = new DenseTensor<float>([1, 3, inputHeight, inputWidth]);
-            var destination = tensor.Buffer.Span;
-            var pixels = letterboxed.GetPixelSpan();
-            var planeSize = inputWidth * inputHeight;
-            for (var y = 0; y < inputHeight; y++)
-            {
-                var sourceRow = y * letterboxed.RowBytes;
-                var destinationRow = y * inputWidth;
-                for (var x = 0; x < inputWidth; x++)
-                {
-                    var sourceOffset = sourceRow + x * 4;
-                    var destinationOffset = destinationRow + x;
-                    destination[destinationOffset] = pixels[sourceOffset] / 255f;
-                    destination[planeSize + destinationOffset] = pixels[sourceOffset + 1] / 255f;
-                    destination[planeSize * 2 + destinationOffset] = pixels[sourceOffset + 2] / 255f;
-                }
-            }
-
-            return (
-                tensor,
-                new LetterboxTransform(
-                    decoded.Width,
-                    decoded.Height,
-                    inputWidth,
-                    inputHeight,
-                    scale,
-                    padLeft,
-                    padTop));
-        }
     }
 
     private sealed record ModelPlan(

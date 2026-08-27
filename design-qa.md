@@ -1,7 +1,7 @@
 # Test Sequence Setting V2 Design QA
 
 - Source visual truth: local review reference only; the source image is not stored in this repository.
-- Implementation screenshots:
+- Historical implementation screenshots (Pass 1–10 evidence; not the current acceptance artifact):
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-preview.png`
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-pose-preview.png`
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-source-preview.png`
@@ -10,8 +10,8 @@
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-rule-preview.png`
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-trigger-preview.png`
 - Source pixels / density: 1872 × 1120 at 72 DPI
-- Implementation pixels / density: 1380 × 860 at 96 DPI
-- WPF viewport: 1380 × 860 device-independent pixels, light theme; the centered five-step strip plus step 2 USB-source selected, step 3 multi-model library, and step 4 test-step editor were captured in basic-information, target/ROI, pose-content, live-rule-summary and external-trigger states
+- Current live review: isolated Release WPF windows were opened on 2026-08-21 with the in-app Windows control surface; the Operator and V2 wizard were inspected at 1368 × 855 in the light theme.
+- Current WPF evidence: centered five-step strip; primary image/camera plus local-video state; three visible model task types and conditional manual-label editor; normal/pose Basic Information and Custom Function tabs; normal Label selector plus per-Label detail modal; temporary pose action-order modal; custom-function form; Operator serial-number input, overlay simplification and qualification-rate naming.
 - Normalization: the source is a low-detail structural wireframe rather than a pixel specification. The full desktop frames were fitted to the same visual scale; differences caused only by density or the source's missing product detail were not filed as defects.
 
 ## Findings
@@ -19,21 +19,21 @@
 No actionable P0, P1, or P2 findings remain.
 
 - Fonts and typography: Segoe UI with Chinese fallback, restrained industrial hierarchy and readable compact labels. Required-field stars, pose-action order numbers and selected-item headings do not collide or truncate at the supported viewport.
-- Spacing and layout rhythm: the implementation preserves the source's ordered wizard-step row plus one dominant content region. The five current workflow steps are centered as one group across the top; former steps 4–7 are represented as four equal-width, unnumbered function tabs inside the selected test step, so one business object is not split across the primary navigation or visually restated as a second wizard. The model library and test-step editors retain a clear left-list/right-current-item rhythm, and primary actions remain visible above the persistent footer.
+- Spacing and layout rhythm: the implementation preserves the source's ordered wizard-step row plus one dominant content region. The five workflow steps are centered as one group across the top. Both normal and pose test steps keep only Basic Information and Custom Function; their extra configuration appears as task-specific temporary dialogs. The model library and test-step editors retain a clear left-list/right-current-item rhythm, and primary actions remain visible above the persistent footer.
 - Colors and visual tokens: the source's outline structure is mapped to the project's Schneider-style pale green, dark green and neutral borders. Red is reserved for required markers; amber is reserved for non-persistent or explanatory notices.
 - Image quality and assets: the source contains no raster imagery, logo or decorative asset. Plus, minus and information controls use the Windows Segoe MDL2 icon family; pose-action sorting uses plain left/right arrows whose direction matches the horizontal action order.
-- Copy and content: all visible product copy is Simplified Chinese. “目标检测（单张图）” and “姿态动作（连续帧）” explain the type distinction at the point of choice; the persistent preview notice prevents mock state from being mistaken for saved configuration.
-- Accessibility and behavior: semantic WPF radio cards, buttons, list items, check boxes, combo boxes and inputs are keyboard-focusable. Help controls expose their ToolTip text as accessible descriptions. The Release construction smoke exercises centered five-step geometry at the 1120-pixel minimum width, USB source selection/green state, multi-model add/remove/type switching, dynamic model binding, unordered test-step add/remove with stable function identifiers, unnumbered function-tab navigation and bounds, explicit pose-action sorting with continuous renumbering, per-step ROI and rule state, external-signal visibility, Signal Tag validation, debounce/delay/timeout summary updates, ToolTip presence and final confirmation.
+- Copy and content: all visible product copy is Simplified Chinese. “目标检测（单张图）”、“姿态动作（连续帧）” and “图像分割（单张图）” explain the type distinction at the point of choice. Frontend-only notices explicitly state that local video, segmentation, custom functions and serial-number traceability are not connected runtime capabilities.
+- Accessibility and behavior: semantic WPF radio cards, buttons, list items, check boxes, combo boxes and inputs are keyboard-focusable. Help controls expose their ToolTip text as accessible descriptions. The Release construction smoke exercises centered five-step geometry, image/camera plus video selection, three-task model UI, conditional manual-label editing, one top-to-bottom test-step list with move controls and no separate Sequence Plan panel, Basic Information/Custom Function tabs, model-to-test-step type synchronization including Segmentation, Model-triggered Label selection, one-Label-at-a-time detail dialogs, additive save and targeted re-edit retention, per-label whole-image/multi-ROI scope and judgment, pose-model-triggered action popup, save-to-summary flow, per-step custom-function state, Operator serial-number/explicit-start state, qualification-rate copy, ToolTips and final confirmation.
 - Step semantics: pale green completion is reserved for a validated, explicitly confirmed step. Direct navigation changes only the current-step outline; skipped cards stay neutral, and a confirmed card returns to neutral as soon as one of its required values becomes invalid.
-- Viewport resilience: the 1380 × 860 target has no clipped field, overlapping action, or footer collision. Automated geometry checks also confirm that the centered step group and all four test-step tabs remain inside their containers at the supported 1120-pixel minimum width.
+- Viewport resilience: the current 1368 × 855 live windows have no clipped primary action, overlapping modal, or footer collision. Automated geometry checks also confirm that the centered step group and all visible type-specific test-step tabs remain inside their containers at the supported 1120-pixel minimum width.
 
 ## Full-view comparison evidence
 
-The reference, test-step editor, target/ROI state, pose-content state, live-rule-summary state and external-trigger state were opened as comparison evidence. All retain the same interaction model: one centered row of ordered wizard cards across the top and one large, focused setting canvas below. The implementation adds only product-required hierarchy: actual step names, statuses, one selected-function editor, four unnumbered local function tabs and persistent previous/next navigation.
+The current wizard, source page, model page, test-step basic page, detection modal, pose action page and custom-function page were opened as live comparison evidence. All retain the same interaction model: one centered row of ordered wizard cards across the top and one large, focused setting canvas below. Type-specific tabs reduce irrelevant controls without changing the primary five-step navigation or persistent previous/next actions.
 
 ## Focused region comparison evidence
 
-The source-selection region was inspected at full resolution with USB selected: the entire USB card has pale-green fill, dark-green border and a check glyph while the other two cards are neutral. The multi-model region was inspected with three different models visible at once: the current model is pale-green selected, add/remove controls are in stable header positions, and the right panel clearly scopes name, task type, file and label source to the selected model. The test-step basic region was inspected at full resolution because it contains the highest control density. The list explicitly says it has no execution order; every row shows name, detection type, required/optional state, invocation mode and a minus action, with no order badge or move controls. The pose screenshot verifies continuous `01/02/03` action numbers and left/right sorting controls. The ROI screenshot verifies the crosshair preview, dashed selection and redraw action; the rule screenshot verifies that target, ROI coordinates, operator and count appear together. The trigger screenshot verifies that stable identifier `TS-FAN-PRESENT`, Signal Tag, rising edge, debounce, delay, timeout and runtime source form one readable contract without clipping; lower execution fields remain reachable through the visible vertical scrollbar.
+The source-selection region was inspected with a main source and local video simultaneously selected. The multi-model region shows only detection, pose/temporal and segmentation; manual labels expand only after the dropdown selection. The normal-step basic region contains detection-child summaries and an add button. Selecting a normal model opens a Label list; selecting a Label opens a second dialog that combines only that Label's whole-image/multi-ROI scope, named ROI editor, fixed-camera warning and judgment fields. Save returns to the list, adds or replaces that Label only, and retains all other configured children. The pose flow keeps only Basic Information and Custom Function tabs: selecting a pose/temporal model opens the action-order popup, whose cards retain continuous `01/02/03` numbers and left/right sorting; saving returns to a Basic Information summary with a re-edit action. The custom-function page contains only type, name, file, delay and description. The Operator live view verifies a serial-number field above Start, “合格率” copy and retained Detection/ROI geometry without model label or confidence text over the image.
 
 ## Comparison history
 
@@ -106,37 +106,100 @@ The source-selection region was inspected at full resolution with USB selected: 
 
 - [P1] The user-facing term was incorrectly written as “测试部”; the product object is a “测试步”.
   - Fix: changed all current V2 interface, validation, acceptance and design copy to “测试步” / Test Step.
-- [P1] Test-step cards still exposed `01/02/03` order badges and up/down controls even though these independently triggered functions do not have a local execution order.
-  - Fix: converted the left panel to an explicitly unordered test-step collection, removed step order badges and move controls, and made function identifiers stable across add/delete operations.
+- [P1] An earlier pass treated test steps as unordered, which conflicted with the later confirmed rule that the list itself defines execution order.
+  - Fix: the current left panel explicitly executes from top to bottom, adds new steps at the end, and provides up/down controls; the separate Sequence Plan remains removed.
 - [P1] Pose actions are the level that requires ordering, but the horizontal execution direction and sorting controls were not explicit enough.
   - Fix: retained continuous pose-action numbers, labeled the direction “from left to right”, changed sorting controls to left/right arrows, and added smoke coverage that moves, renumbers and restores an action.
 - Re-captured the 1380 × 860 test-step basic and pose-content states. No remaining P0/P1/P2 mismatch was found.
 
+### Pass 11 — 2026-08-21 approved frontend v0.2
+
+- [P1] Switching test steps or rebinding a model could leave detection children from the previous model visible, and the Label dialog exposed a second model selector that did not write back to the test step.
+  - Fix: made Basic Information the single model-binding source, changed the Label dialog to a read-only current-model display, reconciled incompatible children/rules on rebind, and added smoke coverage for two model-distinct test steps.
+- [P1] Model removal existed only as a small icon in the current-model editor, so the model library did not clearly communicate that models can be added and removed.
+  - Fix: placed explicit “添加模型 / 删除当前” controls together in the model-list header. Removal targets the selected model and retains the existing referenced-model and last-model guards.
+- [P1] Local video was absent and the source UI could not express an image/camera source together with posture video.
+  - Fix: retained the three mutually exclusive primary source cards and added Local Video as an independent checkable card with a conditional path editor. No decoding or runtime claim was added.
+- [P1] Model import exposed Image Classification and gave manual labels too much permanent space.
+  - Fix: the visible task choices are Detection, Pose/Temporal and Segmentation; Auto Detect / Manual Entry is a compact dropdown and the manual editor appears only when selected.
+- [P1] Normal detection split one decision across Basic Information, Detection Content and Judgment tabs.
+  - Fix: Basic Information opens a Label selector. Selecting one Label opens its own detail modal; that modal combines whole image or one/multiple named ROIs, the fixed-camera notice and that Label's judgment fields.
+- [P1] The first modal implementation treated Label selection as one batch and rebuilt the entire child collection on Apply, so configuring or re-editing one Label could erase previously saved Labels.
+  - Fix: Save now has add-or-replace semantics keyed by Label. It returns to the Label list after each save; adding a second Label preserves the first, and re-editing the first preserves the second and its ROI/rule summary. Release smoke covers both retention directions.
+- [P1] Pose and runtime demonstration controls did not match the reviewed mental model.
+  - Fix: the old visible Trigger & Runtime form is replaced with a per-step Custom Function page limited to type, name, file, delay and description. The existing production Trigger/Runner domain contracts remain untouched and are not represented as hardware integration.
+- [P1] Pose still exposed Action Settings as a persistent third tab, although action order is only needed immediately after selecting a pose/temporal model or when explicitly re-editing it.
+  - Fix: both inspection types now keep only Basic Information and Custom Function tabs. Pose model selection opens a temporary action-order popup; Save returns to a Basic Information summary/re-edit entry, while Cancel/Esc restores the pre-open state.
+- [P1] Operator copy was ambiguous about what should be removed from ONNX output.
+  - Fix: the image keeps Detection boxes and ROI names but omits model label/confidence text. A serial-number frontend entry was added above Start, still requiring an explicit click, and the statistics mode is named “合格率”.
+- [P1] Draft/Validation/Publish/Assign/Activate/Rollback controls and Deployment/Lifecycle summaries mixed future architecture work into the current frontend review.
+  - Fix: the footer now contains only Previous/Next, the final page only summarizes reviewed frontend content, and the top badge reads “前端界面确认稿”. Model SHA/Adapter/Runtime Profile and internal FunctionCode are also hidden from the visible UI while underlying code remains untouched.
+- Verified with isolated Release build, Release construction smoke, 167 xUnit tests, format verification and live Windows inspection of both wizard and Operator windows. No actionable P0, P1 or P2 finding remains in this frontend-only increment.
+
+### Pass 12 — 2026-08-21 segmentation test-step consistency
+
+- [P1] Model import exposed Image Segmentation, but Test Step Basic Information still offered only Detection and Pose; binding a segmentation model also forced the step back to Detection.
+  - Fix: added “图像分割（单张图）” as a distinct test-step type, synchronized bound model task changes to the selected step type, retained the same single-frame per-Label whole-image/multi-ROI and judgment dialogs, and preserved the type while switching test steps.
+- Draft restore now maps Segmentation back to the distinct frontend type instead of displaying it as Detection. This remains frontend state and does not claim a segmentation runtime, mask output or production judgment path.
+- Verified with an isolated Release build and Release construction smoke covering the third option, model linkage, step switching and the per-Label popup.
+
+### Pass 13 — 2026-08-26 test-step interaction repair
+
+- [P1] The test-step model dropdown exposed models from incompatible task types, so a pose step could temporarily bind a detection model.
+  - Fix: filter the dropdown by the selected detection type, automatically rebind an available compatible model on type change, show a clear Step 03 instruction when none exists, and retain the pose-only action-order popup.
+- [P1] Opening and closing the current model dropdown without choosing a different model could clear the visible selection or open the Label chooser.
+  - Fix: capture the model when the dropdown opens and apply model-dependent rebuilding only after an actual selection change.
+- [P1] The per-Label ROI dialog did not expose the current multi-ROI selection beside the judgment fields, and the full-image layout left too much unused space.
+  - Fix: add a live scope summary to the judgment panel, rebalance full-image versus ROI column widths, reduce the preview height, and remove the nested rule-panel scroll container.
+- [P2] The Custom Function page had per-step state but no local way to change the current test step.
+  - Fix: add a current-step selector to that page and preserve each step's independent function values while switching.
+- Verified with an isolated Release build and the Release WPF construction smoke covering model filtering, pose auto-popup, live multi-ROI summary and direct Custom Function step switching.
+
+### Pass 14 — 2026-08-26 source-card feedback repair
+
+- [P1] Selecting USB Camera or Industrial Camera changed only the card highlight while leaving the Folder path form visible, making both choices appear non-functional.
+  - Fix: switch the detail area to a camera-specific parameter panel, update the title and connection explanation for DirectShow versus vendor adapters, and preserve separate device identifiers while moving between the two camera types.
+- The panel exposes only frontend fields (device, resolution, frame rate, pixel format, trigger mode and timeout) and explicitly states that enumeration, connection testing, preview and SDK integration remain pending.
+- Verified with an isolated Release build and WPF construction smoke covering Folder → USB → Industrial → USB → Folder state transitions and Local Video coexistence.
+
+### Pass 15 — 2026-08-26 source-mode simplification
+
+- [P1] The separate Local Video checkbox caused Image Folder to remain selected, implying that both sources would always be combined.
+  - Fix: make Image Folder and Video Folder mutually exclusive source cards, reuse one folder-browser panel with type-specific copy, and preserve one path per source while switching.
+- [P1] Camera parameter panels suggested a configurable capability before the USB and industrial-camera scope had been approved.
+  - Fix: remove the camera parameter panel and present both camera cards as disabled, restrained “待开发” placeholders.
+- Pass 15 supersedes the Pass 14 camera-panel interaction. Camera enumeration, SDK integration, image/video reading and runtime behavior remain outside this frontend increment.
+
 ## Open Questions
 
 - Formal Schneider brand typography and exact token values have not been provided; the current replaceable project tokens remain the accepted interim baseline.
-- This remains a frontend-review build: dynamic model and trigger selection are only UI state; persistence, real model-file import/runtime validation, PLC/IO/sensor adapters and publication stay intentionally disconnected until the user approves the UI and supplies the first hardware/protocol contract.
+- The factory still needs to provide serial-number format and log schema, custom-function samples/call contract, video runtime requirements and actual camera/PLC/IO/Line hardware/protocol details.
+- This increment remains frontend-only for Local Video, named ROI/multi-Label detection children, per-Label judgment, Custom Function and serial-number traceability. Their complete persistence, runtime execution and hardware integration remain pending; the existing V2 configuration/runtime foundation is intentionally not exposed by the current wizard.
 
 ## Implementation Checklist
 
 - [x] Preserve the reference's ordered step strip and single content canvas.
 - [x] Use the current five-step flow and group former parts 4–7 as one test-step setting.
-- [x] Center the five primary steps as one group and use unnumbered, bounded function tabs inside step 4.
-- [x] Present test steps as an unordered function collection with selection, plus and minus controls only.
+- [x] Center the five primary steps as one group and use bounded, type-specific function tabs inside step 4.
+- [x] Present test steps as one top-to-bottom ordered list with selection, add/remove and up/down controls; do not add a second Sequence Plan.
 - [x] Keep explicit continuous ordering and sorting controls inside pose-action sequences.
 - [x] Show required/optional state and red stars for mandatory input.
-- [x] Merge pose into detection type and switch following settings by type.
+- [x] Keep pose as a test-step type and expose its ordered actions only in a temporary popup opened from Basic Information.
 - [x] Support multiple independently configured model cards and reuse the collection in detection-item binding.
+- [x] Remove Image Classification from the current model UI and collapse manual labels behind a source dropdown.
+- [x] Keep Image Folder and Video Folder mutually exclusive with independent remembered paths; retain USB and industrial cameras as disabled pending-development cards.
 - [x] Provide ToolTips for concepts and destructive/ordering controls.
 - [x] Support real pointer-drag ROI selection with live reference-coordinate backfill.
-- [x] Keep target and pose final-judgment summaries synchronized with current inputs.
-- [x] Keep ROI, rule and trigger/runtime values independent for each selected test step.
-- [x] Expose and validate the frontend contract for sequence, external-signal and manual invocation.
-- [x] Keep the prototype frontend-only and visibly non-persistent.
+- [x] Open one detail popup per selected Label, with independent whole-image/multi-ROI scope and judgment; add or replace only that Label on save.
+- [x] Mark ROI as fixed-camera-only and support multiple named regions in the modal.
+- [x] Keep Custom Function name, file and delay independent for each selected test step without executing Python.
+- [x] Add the Operator serial-number placeholder while retaining explicit Start; rename the statistics choice to qualification rate.
+- [x] Retain Detection/ROI geometry while removing model label and confidence text from the runtime image.
+- [x] Keep the new frontend-only fields visibly separated from persistence, execution and hardware claims.
 - [x] Build and capture the WPF implementation without XAML construction errors.
 
 ## Follow-up Polish
 
 - [P3] Revisit small-caption contrast only after the formal Schneider token and target monitor specification are supplied.
 
-final result: passed
+final result: passed for the approved frontend v0.2 scope; backend/runtime items above remain pending
