@@ -10,6 +10,31 @@ namespace VisualInspection.Core.Tests;
 public sealed class FolderBatchTestSequenceRunnerTests
 {
     [Fact]
+    public async Task RunSingleAsync_ProcessesExactlyOneImageAndRunsAllItemsOnOneInference()
+    {
+        var fixture = CreateFixture();
+        var source = new FakeImageSource([Frame(1), Frame(2), Frame(3)]);
+        var provider = new RecordingProvider((_, _) => Task.FromResult(Observation(
+            (fixture.Target1, 1),
+            (fixture.Target2, 1))));
+
+        var result = await new FolderBatchTestSequenceRunner(new NoDelayProvider()).RunSingleAsync(
+            fixture.Project,
+            fixture.Sequence,
+            source,
+            provider);
+
+        Assert.Equal(1, result.SourceIndex);
+        Assert.Equal(3, result.TotalFileCount);
+        Assert.Equal("frame-01.bmp", result.FrameOrigin);
+        Assert.Equal(2, result.RunResult.Items.Count);
+        Assert.Equal(InspectionVerdict.Pass, result.RunResult.Verdict);
+        Assert.Equal([1], provider.AnalyzedFrames);
+        Assert.Equal(1, source.ReadCount);
+        Assert.Equal(ImageSourceState.Closed, source.State);
+    }
+
+    [Fact]
     public async Task RunAsync_ProcessesEveryImageAndRunsAllNormalItemsOnOneInference()
     {
         var fixture = CreateFixture();

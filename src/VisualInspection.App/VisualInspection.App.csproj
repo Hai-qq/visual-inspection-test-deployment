@@ -15,4 +15,8 @@
     <InformationalVersion>0.6.0-onnx-yolo-e2e-zh-CN</InformationalVersion>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(FrontendDemo)' == 'true'">
+    <AssemblyName>VisualInspection.FrontendDemo</AssemblyName>
+  </PropertyGroup>
+
 </Project>

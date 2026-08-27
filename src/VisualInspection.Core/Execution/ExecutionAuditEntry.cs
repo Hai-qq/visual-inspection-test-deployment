@@ -9,6 +9,7 @@ public sealed record ExecutionAuditEntry
     public required string Event { get; init; }
     public required string Message { get; init; }
     public Guid? RunId { get; init; }
+    public string? SerialNumber { get; init; }
     public string? ItemName { get; init; }
     public InspectionVerdict? Verdict { get; init; }
 }

@@ -25,6 +25,27 @@ public sealed class FolderImageSourceTests
             frames.Select(frame => Path.GetFileName(frame.Origin)).ToArray());
     }
 
+    [Fact]
+    public async Task Open_StartIndexSelectsTheNextProductImageAndResetKeepsThatPosition()
+    {
+        using var directory = new TemporaryImageDirectory();
+        directory.WriteImage("image1.png", CreatePng(1, 1));
+        directory.WriteImage("image2.png", CreatePng(2, 2));
+        directory.WriteImage("image3.png", CreatePng(3, 3));
+        await using var source = CreateSource(directory.Path, startFileIndex: 1);
+
+        await source.OpenAsync();
+        var first = await source.ReadAsync();
+        await source.ResetAsync();
+        var replay = await source.ReadAsync();
+
+        Assert.Equal("image2.png", Path.GetFileName(first?.Origin));
+        Assert.Equal(2, first?.SequenceNumber);
+        Assert.Equal("image2.png", Path.GetFileName(replay?.Origin));
+        Assert.Equal(2, replay?.SequenceNumber);
+        Assert.Equal(2, source.Progress.CurrentIndex);
+    }
+
     [Theory]
     [InlineData(".png", ImageFrameDataFormat.EncodedPng)]
     [InlineData(".bmp", ImageFrameDataFormat.EncodedBmp)]
@@ -208,7 +229,8 @@ public sealed class FolderImageSourceTests
         bool includeSubfolders = false,
         bool loopPlayback = false,
         InvalidFileBehavior invalidBehavior = InvalidFileBehavior.Skip,
-        FolderSortOrder sortOrder = FolderSortOrder.NaturalFileName)
+        FolderSortOrder sortOrder = FolderSortOrder.NaturalFileName,
+        int startFileIndex = 0)
     {
         var definition = new InputSourceDefinition
         {
@@ -223,7 +245,7 @@ public sealed class FolderImageSourceTests
                 SortOrder = sortOrder
             }
         };
-        return new FolderImageSource(definition, Environment.CurrentDirectory);
+        return new FolderImageSource(definition, Environment.CurrentDirectory, startFileIndex);
     }
 
     private static async Task<List<ImageFrame>> ReadAllAsync(IImageSource source)
