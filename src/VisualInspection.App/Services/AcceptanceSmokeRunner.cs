@@ -22,7 +22,7 @@ public static class AcceptanceSmokeRunner
     {
         try
         {
-            var bootstrap = await ApplicationBootstrapper.LoadOrCreateProjectAsync(cancellationToken);
+            var bootstrap = await ApplicationBootstrapper.LoadAcceptanceProjectAsync(cancellationToken);
             var project = bootstrap.Project;
             var configurationErrors = ProjectConfigurationValidator.Validate(project)
                 .Where(issue => issue.Severity == ConfigurationValidationSeverity.Error)

@@ -18,43 +18,28 @@ public static class ApplicationBootstrapper
         "VisualInspectionTestDeployment",
         "projects");
 
-    public static async Task<ApplicationBootstrapResult> LoadOrCreateProjectAsync(
+    // Normal startup never reads, creates or restores a saved sequence.
+    public static Task<ApplicationBootstrapResult> CreateUnloadedAsync(
         CancellationToken cancellationToken = default,
         string? storageDirectory = null)
     {
-        var bundledFan = await FrontendDemoAssetSeeder.EnsureAsync(cancellationToken);
-        var demoDirectory = bundledFan?.ImageDirectory ?? await SampleDataSeeder.EnsureAsync(cancellationToken);
-        var modelPath = bundledFan?.ModelPath;
+        cancellationToken.ThrowIfCancellationRequested();
         IProjectConfigurationStore store = new JsonProjectConfigurationStore(storageDirectory ?? ProjectStorageDirectory);
-        var summaries = await store.ListAsync(cancellationToken);
-        ProjectConfiguration project;
-
-        if (summaries.Count == 0)
-        {
-            project = SampleProjectFactory.Create(demoDirectory, modelPath);
-            await store.SaveAsync(project, cancellationToken);
-        }
-        else
-        {
-            project = await store.LoadAsync(summaries.OrderByDescending(value => value.SavedAtUtc).First().ProjectId, cancellationToken)
-                ?? throw new InvalidDataException("所选项目配置已不存在。");
-
-            if (!project.IsUserConfigured && ShouldRestoreBuiltInSource(project))
-            {
-                project = ReplaceActiveFolder(project, demoDirectory);
-                await store.SaveAsync(project, cancellationToken);
-            }
-
-            if (!project.IsUserConfigured && NeedsBuiltInFanRefresh(project, demoDirectory, modelPath))
-            {
-                project = SampleProjectFactory.Create(demoDirectory, modelPath);
-                await store.SaveAsync(project, cancellationToken);
-            }
-        }
-
-        return await CreateBootstrapResultAsync(project, store, demoDirectory, cancellationToken);
+        return Task.FromResult(new ApplicationBootstrapResult(
+            new ProjectConfiguration(), false, "尚未加载图源", false, "请先导入测试序列。",
+            store, string.Empty, null));
     }
 
+    // Explicit acceptance fixtures only; never read or overwrite the operator's saved projects.
+    internal static async Task<ApplicationBootstrapResult> LoadAcceptanceProjectAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var bundledFan = await FrontendDemoAssetSeeder.EnsureAsync(cancellationToken);
+        var demoDirectory = bundledFan?.ImageDirectory ?? await SampleDataSeeder.EnsureAsync(cancellationToken);
+        var project = SampleProjectFactory.Create(demoDirectory, bundledFan?.ModelPath);
+        IProjectConfigurationStore store = new JsonProjectConfigurationStore(ProjectStorageDirectory);
+        return await CreateBootstrapResultAsync(project, store, demoDirectory, cancellationToken);
+    }
     public static async Task<ApplicationBootstrapResult> LoadPortableSequenceAsync(
         string sequencePath,
         CancellationToken cancellationToken = default,
@@ -169,72 +154,6 @@ public static class ApplicationBootstrapper
             : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, expanded));
     }
 
-    private static bool ShouldRestoreBuiltInSource(ProjectConfiguration project)
-    {
-        if (project.Id != SampleProjectFactory.SampleProjectId)
-        {
-            return false;
-        }
-
-        var sequence = project.TestSequences.OrderByDescending(item => item.IsPublished).FirstOrDefault();
-        var source = sequence is null
-            ? null
-            : project.InputSources.FirstOrDefault(item => item.Id == sequence.InputSourceId);
-        return source?.Type == InputSourceType.Folder &&
-            source.Folder is not null &&
-            !Directory.Exists(ResolveFolderPath(source.Folder.FolderPath));
-    }
-
-    private static ProjectConfiguration ReplaceActiveFolder(ProjectConfiguration project, string demoDirectory)
-    {
-        var sequence = project.TestSequences.OrderByDescending(item => item.IsPublished).First();
-        var sources = project.InputSources.Select(source =>
-            source.Id != sequence.InputSourceId
-                ? source
-                : source with
-                {
-                    Name = "内置验收数据",
-                    Type = InputSourceType.Folder,
-                    Folder = (source.Folder ?? new FolderInputOptions()) with
-                    {
-                        FolderPath = demoDirectory,
-                        IncludeSubfolders = false,
-                        SortOrder = FolderSortOrder.NaturalFileName,
-                        InvalidFileBehavior = InvalidFileBehavior.Skip,
-                        LoopPlayback = false,
-                        PoseFrameIntervalMs = 100
-                    },
-                    Camera = null
-                }).ToList();
-        return project with { InputSources = sources };
-    }
-
-    private static bool NeedsBuiltInFanRefresh(
-        ProjectConfiguration project,
-        string demoDirectory,
-        string? modelPath)
-    {
-        if (project.Id != SampleProjectFactory.SampleProjectId)
-        {
-            return false;
-        }
-
-        var sequence = project.TestSequences.FirstOrDefault();
-        var source = sequence is null
-            ? null
-            : project.InputSources.FirstOrDefault(item => item.Id == sequence.InputSourceId);
-        var fanModel = project.Models.FirstOrDefault(item => item.Name == SampleProjectFactory.SampleModelName);
-        var fanItem = sequence?.Items.Count == 1 ? sequence.Items[0] : null;
-        return project.Name != SampleProjectFactory.SampleProjectName ||
-            sequence?.Name != SampleProjectFactory.SampleProductModel ||
-            fanItem?.Name != "风扇检测" ||
-            fanItem?.RuleOperator != RuleLogicalOperator.And ||
-            fanItem?.Rules.Count != 6 ||
-            source?.Folder?.FolderPath != demoDirectory ||
-            fanModel?.FilePath != (modelPath ?? "models/fan.onnx") ||
-            fanModel?.Sha256 != (modelPath is null ? null : SampleProjectFactory.BundledFanModelSha256) ||
-            sequence?.IsPublished != (modelPath is not null);
-    }
 }
 
 public sealed record InputSourceProbeResult(bool IsReady, string Status, ImageFrame? PreviewFrame);

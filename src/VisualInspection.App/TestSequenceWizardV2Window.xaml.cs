@@ -43,6 +43,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     private bool _isRefreshingCompatibleInspectionModels;
     private readonly string[] _sourceAddresses = [string.Empty, string.Empty, string.Empty, string.Empty];
     private bool _isSwitchingSourceKind;
+    private bool _isExporting;
 
     internal bool SuppressSequenceExportForSmoke { get; set; }
     internal bool SuppressApplyToOperatorForSmoke { get; set; }
@@ -66,6 +67,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     {
         _returnToOperatorOnCompletion = returnToOperatorOnCompletion;
         InitializeComponent();
+        Closing += (_, args) => { if (_isExporting) args.Cancel = true; };
 
         Steps =
         [
@@ -129,6 +131,15 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         if (initialProject is not null)
         {
             V2DraftMapper.ApplyProject(Editor, ProjectConfigurationV1Migrator.Migrate(initialProject));
+            if (initialProject.TestSequences.Count == 0)
+            {
+                Editor.ProjectName = string.Empty;
+                Editor.Workstation = string.Empty;
+                Editor.SequenceName = string.Empty;
+                Editor.SequenceVersion = "V1.0";
+                Editor.SourceAddress = string.Empty;
+                Array.Fill(_sourceAddresses, string.Empty);
+            }
             Editor_DraftApplied(this, EventArgs.Empty);
         }
 
@@ -2497,11 +2508,14 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 }
             }
 
-            var customFunctionReady = !string.IsNullOrWhiteSpace(item.CustomFunctionName) &&
-                                      IsNonNegativeInteger(item.CustomFunctionDelayMsText) &&
+            var noCustomFunction = string.IsNullOrWhiteSpace(item.CustomFunctionName) &&
+                                   string.IsNullOrWhiteSpace(item.CustomFunctionFilePath) &&
+                                   string.IsNullOrWhiteSpace(item.CustomFunctionDescription);
+            var customFunctionReady = IsNonNegativeInteger(item.CustomFunctionDelayMsText) &&
+                                      (noCustomFunction || (!string.IsNullOrWhiteSpace(item.CustomFunctionName) &&
                                       item.CustomFunctionTypeIndex is >= 0 and <= 2 &&
                                       (item.CustomFunctionTypeIndex != 0 ||
-                                       !string.IsNullOrWhiteSpace(item.CustomFunctionFilePath));
+                                       !string.IsNullOrWhiteSpace(item.CustomFunctionFilePath))));
             if (!customFunctionReady)
             {
                 invalidItem = item;
@@ -2577,6 +2591,17 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && ReviewHelpToolTip.IsOpen)
+        {
+            ReviewHelpToolTip.IsOpen = false;
+            e.Handled = true;
+            return;
+        }
+        if (_isExporting)
+        {
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Escape && DetectionLabelEditorOverlay.Visibility == Visibility.Visible)
         {
             CancelDetectionLabelEditor();
@@ -2705,18 +2730,52 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     {
         var detectionChildCount = InspectionItems.Sum(item => item.DetectionChildren.Count);
         var actionCount = InspectionItems.Sum(item => item.TypeIndex == 1 ? item.PoseSteps.Count : 0);
+        var functions = InspectionItems.Where(item => !string.IsNullOrWhiteSpace(item.CustomFunctionName)).ToArray();
+        ReviewProductText.Text = string.IsNullOrWhiteSpace(Editor.SequenceName) ? "尚未填写" : Editor.SequenceName;
+        ReviewModelCountText.Text = Models.Count.ToString();
+        ReviewStepCountText.Text = InspectionItems.Count.ToString();
+        ReviewFunctionNotice.Visibility = ReviewCustomFunctionDetailsBorder.Visibility =
+            functions.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         ReviewTestBlocksSummaryText.Text = $"测试步 {InspectionItems.Count} 个 · 从上到下执行 · 全部参与总判定";
-        ReviewTriggerSummaryText.Text = $"自定义函数 {InspectionItems.Count} 个 · 检测标签 {detectionChildCount} 个 · 姿态动作 {actionCount} 个";
+        ReviewTriggerSummaryText.Text = $"自定义函数 {functions.Length} 个 · 检测标签 {detectionChildCount} 个 · 姿态动作 {actionCount} 个";
         ReviewModelsSummaryText.Text = Models.Count == 0
             ? "尚未添加模型"
             : string.Join("；", Models.Select(model => $"{model.Name}（{model.TypeLabel}）"));
         ReviewInspectionOrderText.Text = InspectionItems.Count == 0
             ? "尚未添加测试步"
             : string.Join(" → ", InspectionItems.Select(item => item.Name));
-        ReviewCustomFunctionDetailsText.Text = string.Join("；", InspectionItems.Select(item => item.FunctionContractSummary));
+        ReviewCustomFunctionDetailsText.Text = string.Join("；", functions.Select(item => item.FunctionContractSummary));
         Editor.RefreshSummaries();
+        var issues = new List<ReviewIssue>();
+        for (var index = 0; index < Steps.Count - 1; index++)
+        {
+            if (!IsStepValid(index, out var message)) issues.Add(new(index, message));
+            else if (!_confirmedStepIndexes.Contains(index))
+                issues.Add(new(index, $"请确认第 {index + 1} 步：{Steps[index].Title}。"));
+        }
+        ReviewIssuesList.ItemsSource = issues;
+        ReviewIssuesList.Visibility = issues.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ReviewCheckTitle.Text = issues.Count > 0 ? $"还有 {issues.Count} 项需要确认" : "基础配置检查通过";
+        ReviewCheckHint.Text = issues.Count > 0 ? "完成下列项目后，再应用或导出。" :
+            "可继续应用或导出；文件、模型兼容性及运行就绪状态将在加载时检查。";
+        ReviewCheckBorder.Background = (Brush)FindResource(issues.Count > 0 ? "PanelBrush" : "GreenPaleBrush");
     }
+
+    internal sealed record ReviewIssue(int StepIndex, string Message);
+
+    private void ReviewIssue_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: int stepIndex }) NavigateTo(stepIndex);
+    }
+
+    private void ReviewHelp_Click(object sender, RoutedEventArgs e)
+    {
+        ReviewHelpToolTip.PlacementTarget = ReviewHelpButton;
+        ReviewHelpToolTip.IsOpen = true;
+    }
+
+    private void ReviewHelp_MouseLeave(object sender, MouseEventArgs e) => ReviewHelpToolTip.IsOpen = false;
 
     private void ApplyReviewToOperator()
     {
@@ -2786,6 +2845,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     private async Task CompleteReviewAsync()
     {
+        if (_isExporting) return;
         RefreshStepCompletionStates();
         if (SuppressSequenceExportForSmoke)
         {
@@ -2824,6 +2884,13 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             : dialog.FileName + PortableSequenceFile.FileSuffix;
         try
         {
+            _isExporting = true;
+            BodyPanels.IsEnabled = false;
+            WizardStepsItemsControl.IsEnabled = false;
+            WizardNavigationPanel.IsEnabled = false;
+            ClosePreviewButton.IsEnabled = false;
+            ReviewHelpToolTip.IsOpen = false;
+            CompletionStatusBorder.Visibility = Visibility.Collapsed;
             ExportSequenceButton.IsEnabled = false;
             ExportSequenceButton.Content = "正在导出…";
             var project = CreateCurrentProject();
@@ -2842,10 +2909,19 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            CompletionStatusBorder.Visibility = Visibility.Collapsed;
             ExportSequenceButton.Content = "导出 Sequence 与模型";
             ExportSequenceButton.IsEnabled = true;
             FooterHintText.Text = $"导出失败：{exception.Message}";
             MessageBox.Show(this, exception.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+            BodyPanels.IsEnabled = true;
+            WizardStepsItemsControl.IsEnabled = true;
+            WizardNavigationPanel.IsEnabled = true;
+            ClosePreviewButton.IsEnabled = true;
         }
     }
 

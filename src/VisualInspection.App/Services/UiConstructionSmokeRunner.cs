@@ -22,7 +22,8 @@ public static class UiConstructionSmokeRunner
         try
         {
             var review = captureLayoutReview ? new UiLayoutReviewCapture() : null;
-            var bootstrap = await ApplicationBootstrapper.LoadOrCreateProjectAsync(cancellationToken);
+            await VerifyUnloadedStartupAsync(review, cancellationToken);
+            var bootstrap = await ApplicationBootstrapper.LoadAcceptanceProjectAsync(cancellationToken);
             IUserAccountStore userStore = new JsonUserAccountStore(DemoUserSeeder.UserAccountFilePath);
             await DemoUserSeeder.EnsureAsync(userStore, cancellationToken);
             var authenticationService = new AuthenticationService(userStore);
@@ -1080,6 +1081,17 @@ public static class UiConstructionSmokeRunner
             {
                 throw new InvalidOperationException("V2 五步向导最终页及自定义函数汇总冒烟失败。");
             }
+            if (wizardV2Window.ReviewDetailsExpander.IsExpanded || wizardV2Window.ReviewIssuesList.Items.Count != 0 ||
+                wizardV2Window.ReviewCheckTitle.Text != "基础配置检查通过" ||
+                wizardV2Window.ReviewModelCountText.Text != wizardV2Window.Models.Count.ToString() ||
+                wizardV2Window.ReviewStepCountText.Text != wizardV2Window.InspectionItems.Count.ToString())
+                throw new InvalidOperationException("最终页默认折叠、检查结果或关键数量摘要不正确。");
+            wizardV2Window.ReviewHelpButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            wizardV2Window.UpdateLayout();
+            if (!wizardV2Window.ReviewHelpToolTip.IsOpen ||
+                !ReferenceEquals(wizardV2Window.ReviewHelpToolTip.PlacementTarget, wizardV2Window.ReviewHelpButton))
+                throw new InvalidOperationException("运行与记录说明无法通过点击打开。");
+            wizardV2Window.ReviewHelpToolTip.IsOpen = false;
 
             wizardV2Window.ExportSequenceButton.RaiseEvent(
                 new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -1139,6 +1151,60 @@ public static class UiConstructionSmokeRunner
                 CancellationToken.None);
             return 4;
         }
+    }
+
+    private static async Task VerifyUnloadedStartupAsync(UiLayoutReviewCapture? review, CancellationToken cancellationToken)
+    {
+        var bootstrap = await ApplicationBootstrapper.CreateUnloadedAsync(cancellationToken);
+        var viewModel = new MainWindowViewModel(bootstrap);
+        var window = new MainWindow(viewModel, bootstrap);
+        try
+        {
+            window.Show();
+            foreach (var size in new[] { (1440d, 900d), (1120d, 720d) })
+            {
+                window.Width = size.Item1;
+                window.Height = size.Item2;
+                window.UpdateLayout();
+                if (viewModel.HasLoadedSequence || viewModel.Sequence.Count != 0 || viewModel.DetectionSummary.Count != 0 ||
+                    viewModel.CurrentImage is not null || viewModel.RequiresSerialNumber ||
+                    viewModel.StartCommand.CanExecute(null) || viewModel.ResetCommand.CanExecute(null) ||
+                    viewModel.StopCommand.CanExecute(null) || !viewModel.CanImportSequence || !viewModel.CanOpenSettings ||
+                    window.CurrentItemDetailsScrollViewer.IsVisible || !window.EmptySequencePanel.IsVisible)
+                    throw new InvalidOperationException("未加载序列时仍有示例数据、可执行按钮或导入入口不可用。");
+                AssertInside(window.EmptySequencePanel, window.InspectionViewport, "未加载序列提示");
+                // Commands must remain harmless even if invoked directly instead of through disabled buttons.
+                viewModel.StartCommand.Execute(null);
+                viewModel.ResetCommand.Execute(null);
+                if (viewModel.Sequence.Count != 0 || viewModel.IsRunning || viewModel.Statistics.TotalCount != 0)
+                    throw new InvalidOperationException("空状态命令执行改变了运行状态。");
+                review?.Save(window, $"00a-empty-home-{size.Item1}x{size.Item2}");
+            }
+            var settings = new TestSequenceWizardV2Window(true, bootstrap.Project);
+            try
+            {
+                settings.Show();
+                settings.UpdateLayout();
+                if (settings.Models.Count != 0 || settings.InspectionItems.Count != 0 ||
+                    !string.IsNullOrEmpty(settings.Editor.ProjectName) || !string.IsNullOrEmpty(settings.Editor.SequenceName) ||
+                    !string.IsNullOrEmpty(settings.Editor.SourceAddress))
+                    throw new InvalidOperationException("空操作台的设置入口仍载入示例配置。");
+                review?.Save(settings, "00b-empty-settings");
+                var finalStepContainer = (FrameworkElement)settings.WizardStepsItemsControl.ItemContainerGenerator.ContainerFromIndex(4);
+                ((Button)System.Windows.Media.VisualTreeHelper.GetChild(finalStepContainer, 0))
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                settings.UpdateLayout();
+                if (settings.ReviewIssuesList.Items.Count != 4 || settings.ReviewDetailsExpander.IsExpanded ||
+                    settings.ReviewFunctionNotice.IsVisible || settings.ReviewModelCountText.Text != "0")
+                    throw new InvalidOperationException("空配置最终页未列出四个待完善步骤，或显示了虚构函数。");
+                VisualDescendants<Button>(settings.ReviewIssuesList).First()
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (settings.CurrentStepIndex != 0)
+                    throw new InvalidOperationException("最终页返回修改未跳转到对应步骤。");
+            }
+            finally { settings.Close(); }
+        }
+        finally { window.Close(); }
     }
 
     private static void VerifyWizardLayout(TestSequenceWizardV2Window window)

@@ -84,6 +84,7 @@
                         </Grid>
                     </Border>
 
+                    <TextBlock Grid.Row="1" Text="尚未加载测试序列" Visibility="{Binding EmptySequenceVisibility}" Foreground="{StaticResource MutedTextBrush}" FontSize="13" Margin="16,24" TextWrapping="Wrap"/>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Sequence}">
                             <ItemsControl.ItemTemplate>
@@ -175,7 +176,7 @@
                             <TextBlock Grid.Column="1" Text="{Binding ImageStatusLabel}" FontSize="12" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
-                    <Grid Grid.Row="1" x:Name="InspectionViewport"><Grid.Background><DrawingBrush TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute"><DrawingBrush.Drawing><DrawingGroup><GeometryDrawing Brush="#F3F6F4"><GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,24,24"/></GeometryDrawing.Geometry></GeometryDrawing><GeometryDrawing Geometry="M 24,0 L 0,0 0,24"><GeometryDrawing.Pen><Pen Brush="#DDE5DF" Thickness="1"/></GeometryDrawing.Pen></GeometryDrawing></DrawingGroup></DrawingBrush.Drawing></DrawingBrush></Grid.Background><Image x:Name="InspectionImage" Source="{Binding CurrentImage}" Stretch="Uniform" Margin="8"/></Grid>
+                    <Grid Grid.Row="1" x:Name="InspectionViewport"><Grid.Background><DrawingBrush TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute"><DrawingBrush.Drawing><DrawingGroup><GeometryDrawing Brush="#F3F6F4"><GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,24,24"/></GeometryDrawing.Geometry></GeometryDrawing><GeometryDrawing Geometry="M 24,0 L 0,0 0,24"><GeometryDrawing.Pen><Pen Brush="#DDE5DF" Thickness="1"/></GeometryDrawing.Pen></GeometryDrawing></DrawingGroup></DrawingBrush.Drawing></DrawingBrush></Grid.Background><Image x:Name="InspectionImage" Source="{Binding CurrentImage}" Stretch="Uniform" Margin="8"/><Border x:Name="EmptySequencePanel" Visibility="{Binding EmptySequenceVisibility}" Background="#F9FCFA" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="28" MaxWidth="460" Margin="20" HorizontalAlignment="Center" VerticalAlignment="Center"><StackPanel><TextBlock Text="尚未加载测试序列" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="导入 Sequence 文件后，显示对应型号、测试步和判定规则。" FontSize="13" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,20"/><Button Content="导入测试序列" Click="ImportSequence_Click" IsEnabled="{Binding CanImportSequence}" Style="{StaticResource OperatorPrimaryActionButton}" HorizontalAlignment="Center" Padding="20,10"/></StackPanel></Border></Grid>
                 </Grid>
             </Border>
             <Border Grid.Column="4" Style="{StaticResource PanelBorder}">
@@ -227,7 +228,8 @@
                         <TextBlock Grid.Column="1" Text="{Binding CurrentRuleCombinationText}" FontSize="13" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding CurrentMeasured}"/>
                         <Border Grid.Column="2" Background="{StaticResource GreenPaleBrush}" Padding="16,4" CornerRadius="3" VerticalAlignment="Center"><TextBlock Text="{Binding CurrentResult}" FontSize="18" FontWeight="Bold" Foreground="{Binding CurrentResultBrush}"/></Border>
                     </Grid>
-                    <ScrollViewer x:Name="CurrentItemDetailsScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <TextBlock Grid.Row="1" Text="导入测试序列后显示检测标签、判定逻辑和检测结果。" Visibility="{Binding EmptySequenceVisibility}" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="13" TextWrapping="Wrap"/>
+                    <ScrollViewer x:Name="CurrentItemDetailsScrollViewer" Visibility="{Binding LoadedSequenceVisibility}" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
                                         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Grid Background="#EEF3F0" Height="22">
                                             <Grid.ColumnDefinitions>

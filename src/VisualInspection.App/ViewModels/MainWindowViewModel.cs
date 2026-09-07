@@ -30,8 +30,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private readonly UserSession _session;
     private readonly ProjectConfiguration _project;
-    private readonly TestSequenceDefinition _activeSequence;
-    private readonly InputSourceDefinition _activeSource;
+    private readonly TestSequenceDefinition? _loadedSequence;
+    private readonly InputSourceDefinition? _loadedSource;
+    private TestSequenceDefinition _activeSequence => _loadedSequence
+        ?? throw new InvalidOperationException("尚未导入测试序列。");
+    private InputSourceDefinition _activeSource => _loadedSource
+        ?? throw new InvalidOperationException("尚未加载图源。");
     private readonly AsyncRelayCommand _startCommand;
     private readonly RelayCommand _stopCommand;
     private readonly RelayCommand _resetCommand;
@@ -40,6 +44,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly List<ExecutionAuditEntry> _pendingAudit = [];
     private CancellationTokenSource? _runCancellation;
     private bool _isRunning;
+    private bool _isLoadingSequence;
     private string _statusText;
     private string _currentResult = "等待中";
     private string _currentItemName;
@@ -60,12 +65,12 @@ public sealed class MainWindowViewModel : ObservableObject
         _session = session ?? new UserSession(Guid.Empty, "admin", "演示管理员", UserRole.Admin);
         ArgumentNullException.ThrowIfNull(bootstrap);
         _project = bootstrap.Project;
-        _activeSequence = _project.TestSequences
+        _loadedSequence = _project.TestSequences
             .OrderByDescending(sequence => sequence.IsPublished)
             .ThenBy(sequence => sequence.Name, StringComparer.CurrentCultureIgnoreCase)
-            .FirstOrDefault()
-            ?? throw new InvalidOperationException("项目中没有测试序列。");
-        _activeSource = _project.InputSources.First(input => input.Id == _activeSequence.InputSourceId);
+            .FirstOrDefault();
+        _loadedSource = _loadedSequence is null ? null :
+            _project.InputSources.First(input => input.Id == _loadedSequence.InputSourceId);
         _logStore = new JsonLineExecutionLogStore(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "VisualInspectionTestDeployment",
@@ -74,6 +79,31 @@ public sealed class MainWindowViewModel : ObservableObject
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "VisualInspectionTestDeployment",
             "results"));
+
+        Statistics = new StatisticsViewModel();
+        Logs = new ObservableCollection<ExecutionLogEntryViewModel>();
+        DetectionSummary = new ObservableCollection<DetectionSummaryRowViewModel>();
+        _startCommand = new AsyncRelayCommand(
+            StartAsync,
+            () => HasLoadedSequence && !IsRunning && !IsLoadingSequence && IsInputSourceReady && IsRuntimeReady);
+        _stopCommand = new RelayCommand(Stop, () => IsRunning);
+        _resetCommand = new RelayCommand(Reset, () => HasLoadedSequence && !IsRunning && !IsLoadingSequence);
+        if (!HasLoadedSequence)
+        {
+            ProjectName = "导入后显示型号、测试步和判定规则";
+            SequenceName = "未加载测试序列";
+            SourceName = "检测图像";
+            InputSourceStatus = "尚未加载图源";
+            RuntimeStatus = "请先导入测试序列。";
+            SourceStateText = RuntimeStateText = "未加载";
+            _statusText = RuntimeStatus;
+            _currentItemName = "检测结果";
+            _currentStandard = _currentRuleCombinationText = _currentExecutionDetails = string.Empty;
+            _currentResult = "未加载";
+            _currentMeasured = "导入测试序列后显示判定规则与结果";
+            Sequence = [];
+            return;
+        }
 
         ProjectName = _project.Name;
         SequenceName = $"{_activeSequence.Name} · {_activeSequence.Version}" +
@@ -116,19 +146,14 @@ public sealed class MainWindowViewModel : ObservableObject
             _currentImage = CreateAnnotatedImageSource(bootstrap.PreviewFrame, firstItem, []);
         }
 
-        Statistics = new StatisticsViewModel();
-        Logs = new ObservableCollection<ExecutionLogEntryViewModel>();
-        DetectionSummary = new ObservableCollection<DetectionSummaryRowViewModel>();
         PopulatePendingDetectionSummary(firstItem);
-        _startCommand = new AsyncRelayCommand(
-            StartAsync,
-            () => !IsRunning && IsInputSourceReady && IsRuntimeReady);
-        _stopCommand = new RelayCommand(Stop, () => IsRunning);
-        _resetCommand = new RelayCommand(Reset, () => !IsRunning);
         AddLog("INFO", _statusText);
     }
 
     public string ProjectName { get; }
+    public bool HasLoadedSequence => _loadedSequence is not null;
+    public Visibility LoadedSequenceVisibility => HasLoadedSequence ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility EmptySequenceVisibility => HasLoadedSequence ? Visibility.Collapsed : Visibility.Visible;
     public string SequenceName { get; }
     public string SourceName { get; }
     public bool IsInputSourceReady { get; }
@@ -151,9 +176,21 @@ public sealed class MainWindowViewModel : ObservableObject
     public ICommand StartCommand => _startCommand;
     public ICommand StopCommand => _stopCommand;
     public ICommand ResetCommand => _resetCommand;
-    public bool CanOpenSettings => !IsRunning && IsAdmin;
-    public bool CanImportSequence => !IsRunning;
-    public bool RequiresSerialNumber => _activeSource.Type != InputSourceType.Folder;
+    public bool CanOpenSettings => !IsRunning && !IsLoadingSequence && IsAdmin;
+    public bool CanImportSequence => !IsRunning && !IsLoadingSequence;
+    public bool IsLoadingSequence
+    {
+        get => _isLoadingSequence;
+        internal set
+        {
+            if (!SetProperty(ref _isLoadingSequence, value)) return;
+            _startCommand.NotifyCanExecuteChanged();
+            _resetCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(CanOpenSettings));
+            OnPropertyChanged(nameof(CanImportSequence));
+        }
+    }
+    public bool RequiresSerialNumber => _loadedSource is not null && _loadedSource.Type != InputSourceType.Folder;
     public Func<string?>? RequestSerialNumber { get; set; }
 
     public bool IsRunning
@@ -229,7 +266,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public string ImageStatusLabel => CurrentImage is null ? "等待导入图像" :
+    public string ImageStatusLabel => !HasLoadedSequence ? "未加载" : CurrentImage is null ? "等待图像" :
         $"{(RuntimeStatus.StartsWith("真实 ONNX", StringComparison.Ordinal) ? "ONNX 推理" : IsRuntimeReady ? "验收数据" : "运行未就绪")} · " +
         (CurrentImage is BitmapSource bitmap ? $"{bitmap.PixelWidth} × {bitmap.PixelHeight}" : "无图像");
 
@@ -247,6 +284,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async Task StartAsync()
     {
+        if (!HasLoadedSequence || !IsInputSourceReady || !IsRuntimeReady) return;
         var serialNumber = RequiresSerialNumber
             ? RequestSerialNumber?.Invoke()?.Trim()
             : null;
@@ -413,6 +451,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void Reset()
     {
+        if (!HasLoadedSequence) return;
         ResetItems();
         DetectionSummary.Clear();
         CurrentResult = "等待中";

@@ -203,7 +203,7 @@ public partial class App : Application
 
             if (e.Args.Contains("--operator-preview", StringComparer.OrdinalIgnoreCase))
             {
-                var previewBootstrap = await ApplicationBootstrapper.LoadOrCreateProjectAsync();
+                var previewBootstrap = await ApplicationBootstrapper.CreateUnloadedAsync();
                 var previewSession = new UserSession(
                     Guid.Empty,
                     "operator-preview",
@@ -245,7 +245,7 @@ public partial class App : Application
                 return;
             }
 
-            var result = await ApplicationBootstrapper.LoadOrCreateProjectAsync();
+            var result = await ApplicationBootstrapper.CreateUnloadedAsync();
             var window = new MainWindow(new MainWindowViewModel(result, login.Session), result, login.Session);
             MainWindow = window;
             window.Show();
