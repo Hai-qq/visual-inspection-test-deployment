@@ -166,6 +166,12 @@ public static class V2DraftMapper
                 item.CustomFunctionFilePath = function.FilePath;
                 item.CustomFunctionDescription = function.Description;
             }
+            else
+            {
+                item.CustomFunctionName = string.Empty;
+                item.CustomFunctionFilePath = string.Empty;
+                item.CustomFunctionDescription = string.Empty;
+            }
             if (invocation is not null)
             {
                 item.CustomFunctionDelayMsText = invocation.DelayMs.ToString(CultureInfo.InvariantCulture);
@@ -247,7 +253,10 @@ public static class V2DraftMapper
             ModelBindings = bindings,
             RuleSet = isPose ? null : ToRuleSet(item, bindings),
             PoseProgram = isPose ? ToPoseProgram(item, bindings) : null,
-            CustomFunction = new CustomFunctionConfiguration
+            CustomFunction = string.IsNullOrWhiteSpace(item.CustomFunctionName) &&
+                             string.IsNullOrWhiteSpace(item.CustomFunctionFilePath) &&
+                             string.IsNullOrWhiteSpace(item.CustomFunctionDescription)
+                ? null : new CustomFunctionConfiguration
             {
                 Kind = (CustomFunctionKind)item.CustomFunctionTypeIndex, Name = item.CustomFunctionName,
                 FilePath = item.CustomFunctionFilePath, Description = item.CustomFunctionDescription

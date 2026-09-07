@@ -65,6 +65,15 @@ internal sealed class UiLayoutReviewCapture
                 Save(window, $"15-function-{suffix}");
                 ClickStep(window, 4);
                 Save(window, $"16-export-{suffix}");
+                window.ReviewDetailsExpander.IsExpanded = true;
+                window.Step9Panel.ScrollToEnd();
+                Save(window, $"16b-export-details-{suffix}");
+                window.ReviewDetailsExpander.IsExpanded = false;
+                window.Step9Panel.ScrollToHome();
+                ClickStep(window, 0);
+                for (var step = 0; step < 4; step++)
+                    window.NextButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Save(window, $"16c-export-confirmed-{suffix}");
                 window.ShowTargetContentStepForPreview();
                 Save(window, $"17-label-list-{suffix}");
                 window.ShowTargetRuleStepForPreview();

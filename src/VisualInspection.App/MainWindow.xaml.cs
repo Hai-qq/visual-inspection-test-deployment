@@ -31,6 +31,7 @@ public partial class MainWindow : Window
 
     private async void ImportSequence_Click(object sender, RoutedEventArgs e)
     {
+        if (DataContext is not MainWindowViewModel current || !current.CanImportSequence) return;
         var dialog = new OpenFileDialog
         {
             Title = "导入测试序列",
@@ -45,6 +46,7 @@ public partial class MainWindow : Window
 
         try
         {
+            current.IsLoadingSequence = true;
             var imported = await ApplicationBootstrapper.LoadPortableSequenceAsync(dialog.FileName, persist: true);
             var replacement = new MainWindow(
                 new MainWindowViewModel(imported, _session),
@@ -63,10 +65,15 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+        finally
+        {
+            current.IsLoadingSequence = false;
+        }
     }
 
     private async void SequenceSettings_Click(object sender, RoutedEventArgs e)
     {
+        if (DataContext is MainWindowViewModel current && (current.IsRunning || current.IsLoadingSequence)) return;
         if (!_session.IsAdmin)
         {
             MessageBox.Show(this, "只有管理员可以打开测试序列设置。", "权限不足", MessageBoxButton.OK, MessageBoxImage.Warning);

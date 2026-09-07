@@ -8,6 +8,25 @@ namespace VisualInspection.App.Tests;
 public sealed class V2DraftMapperTests
 {
     [Fact]
+    public void RoundTrip_DoesNotInventCustomFunctionForImportedStep()
+    {
+        var model = CreateModel("fan", 0, KnownAdapterIds.YoloEndToEndDetection, ["fan"]);
+        var item = new TestSequenceWizardV2Window.InspectionItemPreview("TS-FAN", "风扇", 0, true, model);
+        var original = V2DraftMapper.ToProject(new TestSequenceWizardV2ViewModel([model], [item]));
+        original = original with
+        {
+            TestStepCatalog = original.TestStepCatalog.Select(step => step with { CustomFunction = null }).ToList()
+        };
+        var legacy = ProjectConfigurationV2CompatibilityConverter.ToV1(original, System.IO.Path.GetTempPath());
+        var editor = new TestSequenceWizardV2ViewModel([], []);
+        V2DraftMapper.ApplyProject(editor, ProjectConfigurationV1Migrator.Migrate(legacy));
+
+        Assert.Empty(editor.InspectionItems.Single().CustomFunctionName);
+        Assert.Empty(editor.InspectionItems.Single().CustomFunctionFilePath);
+        Assert.Null(V2DraftMapper.ToProject(editor).TestStepCatalog.Single().CustomFunction);
+    }
+
+    [Fact]
     public void ToProject_UsesTestStepListOrderAndAllowsMultipleInvocationChannels()
     {
         var model = CreateModel("fan", 0, KnownAdapterIds.YoloEndToEndDetection, ["fan", "defect"]);
