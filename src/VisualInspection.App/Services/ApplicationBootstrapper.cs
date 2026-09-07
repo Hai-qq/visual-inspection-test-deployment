@@ -2,9 +2,12 @@ using System.IO;
 using VisualInspection.App.Demo;
 using VisualInspection.Core.Configuration;
 using VisualInspection.Core.Imaging;
+using VisualInspection.Core.Rules;
+using VisualInspection.Core.V2.Configuration;
 using VisualInspection.Infrastructure.Analysis;
 using VisualInspection.Infrastructure.Imaging;
 using VisualInspection.Infrastructure.Persistence;
+using VisualInspection.Infrastructure.V2.Persistence;
 
 namespace VisualInspection.App.Services;
 
@@ -18,14 +21,16 @@ public static class ApplicationBootstrapper
     public static async Task<ApplicationBootstrapResult> LoadOrCreateProjectAsync(
         CancellationToken cancellationToken = default)
     {
-        var demoDirectory = await SampleDataSeeder.EnsureAsync(cancellationToken);
+        var bundledFan = await FrontendDemoAssetSeeder.EnsureAsync(cancellationToken);
+        var demoDirectory = bundledFan?.ImageDirectory ?? await SampleDataSeeder.EnsureAsync(cancellationToken);
+        var modelPath = bundledFan?.ModelPath;
         IProjectConfigurationStore store = new JsonProjectConfigurationStore(ProjectStorageDirectory);
         var summaries = await store.ListAsync(cancellationToken);
         ProjectConfiguration project;
 
         if (summaries.Count == 0)
         {
-            project = SampleProjectFactory.Create(demoDirectory);
+            project = SampleProjectFactory.Create(demoDirectory, modelPath);
             await store.SaveAsync(project, cancellationToken);
         }
         else
@@ -39,13 +44,53 @@ public static class ApplicationBootstrapper
                 await store.SaveAsync(project, cancellationToken);
             }
 
-            if (NeedsSampleLocalization(project))
+            if (NeedsBuiltInFanRefresh(project, demoDirectory, modelPath))
             {
-                project = LocalizeSampleProject(project);
+                project = SampleProjectFactory.Create(demoDirectory, modelPath);
                 await store.SaveAsync(project, cancellationToken);
             }
         }
 
+        return await CreateBootstrapResultAsync(project, store, demoDirectory, cancellationToken);
+    }
+
+    public static async Task<ApplicationBootstrapResult> LoadPortableSequenceAsync(
+        string sequencePath,
+        CancellationToken cancellationToken = default)
+    {
+        var absolutePath = Path.GetFullPath(sequencePath);
+        var portable = await PortableSequenceFile.LoadAsync(absolutePath, cancellationToken);
+        var project = ProjectConfigurationV2CompatibilityConverter.ToV1(
+            portable,
+            Path.GetDirectoryName(absolutePath)!);
+        IProjectConfigurationStore store = new JsonProjectConfigurationStore(ProjectStorageDirectory);
+        var source = project.InputSources.Single();
+        var dataDirectory = source.Folder?.FolderPath ?? Path.GetDirectoryName(absolutePath)!;
+        return await CreateBootstrapResultAsync(project, store, dataDirectory, cancellationToken);
+    }
+
+    public static async Task<ApplicationBootstrapResult> LoadConfiguredSequenceAsync(
+        ProjectConfigurationV2 configuredSequence,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(configuredSequence);
+        var project = ProjectConfigurationV2CompatibilityConverter.ToV1(
+            configuredSequence,
+            AppContext.BaseDirectory);
+        IProjectConfigurationStore store = new JsonProjectConfigurationStore(ProjectStorageDirectory);
+        var source = project.InputSources.Single();
+        var dataDirectory = source.Folder?.FolderPath ?? AppContext.BaseDirectory;
+        var result = await CreateBootstrapResultAsync(project, store, dataDirectory, cancellationToken);
+        await store.SaveAsync(project, cancellationToken);
+        return result;
+    }
+
+    private static async Task<ApplicationBootstrapResult> CreateBootstrapResultAsync(
+        ProjectConfiguration project,
+        IProjectConfigurationStore store,
+        string dataDirectory,
+        CancellationToken cancellationToken)
+    {
         var issues = ProjectConfigurationValidator.Validate(project);
         var errors = issues.Where(issue => issue.Severity == ConfigurationValidationSeverity.Error).ToArray();
         if (errors.Length > 0)
@@ -79,7 +124,7 @@ public static class ApplicationBootstrapper
             probe.IsReady && runtimeReady,
             runtimeStatus,
             store,
-            demoDirectory,
+            dataDirectory,
             probe.PreviewFrame);
     }
 
@@ -159,81 +204,32 @@ public static class ApplicationBootstrapper
         return project with { InputSources = sources };
     }
 
-    private static ProjectConfiguration LocalizeSampleProject(ProjectConfiguration project)
+    private static bool NeedsBuiltInFanRefresh(
+        ProjectConfiguration project,
+        string demoDirectory,
+        string? modelPath)
     {
-        var models = project.Models.Select(model => model.Id.ToString("N") switch
+        if (project.Id != SampleProjectFactory.SampleProjectId)
         {
-            "10000000000000000000000000000001" => model with
-            {
-                Name = "检测模型 A",
-                Labels = model.Labels.Select(label => label with
-                {
-                    Name = label.Id switch { 0 => "螺钉", 1 => "标签", 2 => "瑕疵", _ => label.Name }
-                }).ToList()
-            },
-            "10000000000000000000000000000002" => model with
-            {
-                Name = "动作姿态模型",
-                Labels = model.Labels.Select(label => label with { Name = label.Id == 0 ? "操作员" : label.Name }).ToList()
-            },
-            _ => model
-        }).ToList();
-        var targets = project.Targets.Select(target => target.Id.ToString("N") switch
-        {
-            "20000000000000000000000000000001" => target with { Name = "螺钉" },
-            "20000000000000000000000000000002" => target with { Name = "标签" },
-            "20000000000000000000000000000003" => target with { Name = "表面瑕疵" },
-            "20000000000000000000000000000004" => target with { Name = "操作员动作" },
-            _ => target
-        }).ToList();
-        var sequences = project.TestSequences.Select(sequence => sequence with
-        {
-            Name = sequence.Id == Guid.Parse("50000000-0000-0000-0000-000000000001")
-                ? "终检测试序列"
-                : sequence.Name,
-            Items = sequence.Items.Select(item => item with
-            {
-                Name = item.Order switch
-                {
-                    1 => "螺钉在位",
-                    2 => "标签对齐",
-                    3 => "表面瑕疵",
-                    4 => "动作序列",
-                    _ => item.Name
-                },
-                Rules = item.Rules.Select(rule => rule with
-                {
-                    Scope = rule.Scope with
-                    {
-                        Regions = rule.Scope.Regions.Select(region => region with
-                        {
-                            Name = region.Name == "ROI-A" ? "区域-A" : region.Name
-                        }).ToList()
-                    }
-                }).ToList(),
-                PoseSteps = item.PoseSteps.Select(step => step with
-                {
-                    Name = step.Order switch { 1 => "拿取", 2 => "放置", 3 => "确认", _ => step.Name }
-                }).ToList()
-            }).ToList()
-        }).ToList();
+            return false;
+        }
 
-        return project with
-        {
-            Name = "A 线 · 开关装配",
-            Workstation = "工位 01",
-            Models = models,
-            Targets = targets,
-            TestSequences = sequences,
-            InputSources = project.InputSources.Select(source =>
-                source.Name is "Sample Set 01" or "Built-in Acceptance Set"
-                    ? source with { Name = "内置验收数据" }
-                    : source).ToList()
-        };
+        var sequence = project.TestSequences.FirstOrDefault();
+        var source = sequence is null
+            ? null
+            : project.InputSources.FirstOrDefault(item => item.Id == sequence.InputSourceId);
+        var fanModel = project.Models.FirstOrDefault(item => item.Name == SampleProjectFactory.SampleModelName);
+        var fanItem = sequence?.Items.Count == 1 ? sequence.Items[0] : null;
+        return project.Name != SampleProjectFactory.SampleProjectName ||
+            sequence?.Name != SampleProjectFactory.SampleProductModel ||
+            fanItem?.Name != "风扇检测" ||
+            fanItem?.RuleOperator != RuleLogicalOperator.And ||
+            fanItem?.Rules.Count != 6 ||
+            source?.Folder?.FolderPath != demoDirectory ||
+            fanModel?.FilePath != (modelPath ?? "models/fan.onnx") ||
+            fanModel?.Sha256 != (modelPath is null ? null : SampleProjectFactory.BundledFanModelSha256) ||
+            sequence?.IsPublished != (modelPath is not null);
     }
-
-    private static bool NeedsSampleLocalization(ProjectConfiguration project)
-        => project.Id == SampleProjectFactory.SampleProjectId && project.Name != "A 线 · 开关装配";
 }
 
 public sealed record InputSourceProbeResult(bool IsReady, string Status, ImageFrame? PreviewFrame);

@@ -73,7 +73,7 @@
                         <TextBlock Text="{Binding ProjectName}" FontSize="14" FontWeight="SemiBold" />
                     </StackPanel>
                     <StackPanel Margin="0,0,36,0">
-                        <TextBlock Text="测试序列" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
+                        <TextBlock Text="型号" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                         <TextBlock Text="{Binding SequenceName}" FontSize="14" FontWeight="SemiBold" />
                     </StackPanel>
                     <StackPanel>
@@ -96,7 +96,10 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel x:Name="HeaderAdminActionsPanel" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="SequenceSettingsButton" Content="测试序列设置 V2" Click="SequenceSettings_Click" IsEnabled="{Binding CanOpenSettings}"
+                    <Button x:Name="ImportSequenceButton" Content="导入测试序列" Click="ImportSequence_Click"
+                            IsEnabled="{Binding CanImportSequence}" Margin="0,0,8,0" Padding="12,6" FontSize="11"
+                            ToolTip="导入 *.sequence.json；对应模型文件必须与 sequence 放在同一目录并通过 SHA-256 校验。" />
+                    <Button x:Name="SequenceSettingsButton" Content="测试序列设置" Click="SequenceSettings_Click" IsEnabled="{Binding CanOpenSettings}"
                             Visibility="{Binding SettingsVisibility}" Margin="0,0,8,0"
                             Padding="12,6" FontSize="11" />
                     <Border Background="{StaticResource GreenPaleBrush}" Padding="8,4" CornerRadius="2" Margin="0,0,12,0">
@@ -176,8 +179,6 @@
 
                     <Grid Grid.Row="2" Margin="12">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="8" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="8" />
                             <RowDefinition Height="*" />
@@ -187,25 +188,10 @@
                             <ColumnDefinition Width="8" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Row="0" Grid.ColumnSpan="3" Background="#F6F8F7" BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1" CornerRadius="4" Padding="10,8">
-                            <StackPanel>
-                                <Grid>
-                                    <TextBlock Text="产品序列号" FontSize="11" FontWeight="SemiBold" />
-                                    <TextBlock Text="人工 / 扫码枪 / 二维码" HorizontalAlignment="Right" FontSize="9"
-                                               Foreground="{StaticResource MutedTextBrush}" />
-                                </Grid>
-                                <TextBox x:Name="SerialNumberInputTextBox" Height="32" Margin="0,6,0,0" Padding="8,4"
-                                         Text="{Binding SerialNumberInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         IsReadOnly="{Binding IsRunning}"
-                                         AutomationProperties.HelpText="必须先录入序列号；每次点击开始只检测一个产品和一张图片。" />
-                                <TextBlock Text="{Binding SerialNumberStatusText}" FontSize="9" Margin="0,5,0,0" TextWrapping="Wrap"
-                                           Foreground="{StaticResource MutedTextBrush}" />
-                            </StackPanel>
-                        </Border>
-                        <Button x:Name="StartActionButton" Grid.Row="2" Grid.ColumnSpan="3" Command="{Binding StartCommand}"
+                        <Button x:Name="StartActionButton" Grid.Row="0" Grid.ColumnSpan="3" Command="{Binding StartCommand}"
                                 Style="{StaticResource OperatorPrimaryActionButton}"
-                                AutomationProperties.Name="开始">
+                                AutomationProperties.Name="开始"
+                                ToolTip="文件夹图源直接检测下一张图片，并以图片主文件名作为序列号；相机图源会先弹窗录入序列号。">
                             <StackPanel Orientation="Horizontal">
                                 <Viewbox Width="16" Height="16" Margin="0,0,9,0">
                                     <Path Data="M 2,1 L 15,8 L 2,15 Z" Fill="White" />
@@ -213,7 +199,7 @@
                                 <TextBlock x:Name="StartActionText" Text="开始" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="StopActionButton" Grid.Row="4" Grid.Column="0" Command="{Binding StopCommand}"
+                        <Button x:Name="StopActionButton" Grid.Row="2" Grid.Column="0" Command="{Binding StopCommand}"
                                 Style="{StaticResource OperatorStopActionButton}" AutomationProperties.Name="停止">
                             <StackPanel Orientation="Horizontal">
                                 <Rectangle Width="13" Height="13" RadiusX="1" RadiusY="1"
@@ -221,7 +207,7 @@
                                 <TextBlock x:Name="StopActionText" Text="停止" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="ResetActionButton" Grid.Row="4" Grid.Column="2" Command="{Binding ResetCommand}"
+                        <Button x:Name="ResetActionButton" Grid.Row="2" Grid.Column="2" Command="{Binding ResetCommand}"
                                 Style="{StaticResource OperatorActionButton}" AutomationProperties.Name="复位">
                             <StackPanel Orientation="Horizontal">
                                 <Viewbox Width="17" Height="17" Margin="0,0,8,0">
@@ -241,7 +227,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="12" />
-                    <RowDefinition Height="176" />
+                    <RowDefinition Height="230" />
                 </Grid.RowDefinitions>
                 <Border Style="{StaticResource PanelBorder}" Background="#E8EDEB" ClipToBounds="True">
                     <Grid>
@@ -273,7 +259,8 @@
                                 <TextBlock Text="当前图像源" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
                                 <TextBlock Text="{Binding SourceName}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource GreenDarkBrush}" />
                                 <TextBlock Text="{Binding InputSourceStatus}" FontSize="11" Foreground="{StaticResource MutedTextBrush}"
-                                           MaxWidth="300" TextTrimming="CharacterEllipsis" />
+                                           MaxWidth="300" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding InputSourceStatus}" />
                             </StackPanel>
                         </Border>
 
@@ -296,13 +283,49 @@
                                       Margin="0,0,4,0" Padding="0,0,6,0">
                             <StackPanel VerticalAlignment="Top">
                                 <TextBlock Text="当前检测项" FontSize="11" Foreground="{StaticResource MutedTextBrush}" />
-                                <TextBlock Text="{Binding CurrentItemName}" FontSize="22" FontWeight="SemiBold" Margin="0,4,0,8" />
-                                <TextBlock Text="{Binding CurrentStandard}"
-                                           FontSize="13" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding CurrentMeasured}"
-                                           FontSize="13" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding CurrentExecutionDetails}"
-                                           FontSize="12" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CurrentItemName}" FontSize="20" FontWeight="SemiBold" Margin="0,3,0,2" />
+                                <TextBlock Text="{Binding CurrentRuleCombinationText}" FontSize="10"
+                                           Foreground="{StaticResource MutedTextBrush}" Margin="0,0,0,8" />
+                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" Background="#FBFCFB">
+                                    <StackPanel>
+                                        <Grid Background="#EEF3F0" Height="28">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="165" />
+                                                <ColumnDefinition Width="105" />
+                                                <ColumnDefinition Width="66" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="检测标签" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0" />
+                                            <TextBlock x:Name="DetectionLogicHeaderText" Grid.Column="1" Text="判定逻辑" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="DetectionMeasuredHeaderText" Grid.Column="2" Text="本次实测" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="DetectionResultHeaderText" Grid.Column="3" Text="Result" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <ItemsControl x:Name="DetectionSummaryItemsControl" ItemsSource="{Binding DetectionSummary}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Height="30" Background="White">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="165" />
+                                                            <ColumnDefinition Width="105" />
+                                                            <ColumnDefinition Width="66" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding Label}" Margin="10,0" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding LogicText}" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding LogicText}" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding MeasuredText}" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding MeasuredDetailText}" />
+                                                        <TextBlock Grid.Column="3" Text="{Binding Result}" Foreground="{Binding ResultBrush}"
+                                                                   FontWeight="Bold" VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="{Binding CurrentMeasured}" FontSize="10" Foreground="{StaticResource MutedTextBrush}"
+                                           Margin="0,6,0,0" TextWrapping="Wrap" />
                             </StackPanel>
                         </ScrollViewer>
                         <Border Grid.Column="1" Background="{StaticResource GreenPaleBrush}" BorderBrush="#B7DACC"

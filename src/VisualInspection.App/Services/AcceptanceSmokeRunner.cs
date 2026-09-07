@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using VisualInspection.App.Demo;
+using VisualInspection.Core.Analysis;
 using VisualInspection.Core.Configuration;
 using VisualInspection.Core.Domain;
 using VisualInspection.Core.Execution;
@@ -21,8 +22,8 @@ public static class AcceptanceSmokeRunner
     {
         try
         {
-            var demoDirectory = await SampleDataSeeder.EnsureAsync(cancellationToken);
-            var project = SampleProjectFactory.Create(demoDirectory);
+            var bootstrap = await ApplicationBootstrapper.LoadOrCreateProjectAsync(cancellationToken);
+            var project = bootstrap.Project;
             var configurationErrors = ProjectConfigurationValidator.Validate(project)
                 .Where(issue => issue.Severity == ConfigurationValidationSeverity.Error)
                 .ToArray();
@@ -42,13 +43,19 @@ public static class AcceptanceSmokeRunner
             var sourceDefinition = project.InputSources.First(item => item.Id == sequence.InputSourceId);
             var folderPath = ApplicationBootstrapper.ResolveFolderPath(sourceDefinition.Folder!.FolderPath);
             await using var source = ImageSourceFactory.Create(sourceDefinition, AppContext.BaseDirectory);
-            var provider = await ManifestInspectionProvider.LoadAsync(folderPath, project, cancellationToken);
-            var result = await new TestSequenceRunner().RunAsync(
+            var onnxProbe = OnnxYoloInspectionProvider.Probe(project, sequence, AppContext.BaseDirectory);
+            using var onnxProvider = onnxProbe.IsReady
+                ? OnnxYoloInspectionProvider.Create(project, sequence, AppContext.BaseDirectory)
+                : null;
+            IInspectionProvider provider = (IInspectionProvider?)onnxProvider ??
+                await ManifestInspectionProvider.LoadAsync(folderPath, project, cancellationToken);
+            var imageResult = await new FolderBatchTestSequenceRunner().RunSingleAsync(
                 project,
                 sequence,
                 source,
                 provider,
                 cancellationToken: cancellationToken);
+            var result = imageResult.RunResult;
             var exitCode = result.Verdict switch
             {
                 InspectionVerdict.Pass => 0,
@@ -61,6 +68,8 @@ public static class AcceptanceSmokeRunner
                 Verdict = result.Verdict,
                 ExitCode = exitCode,
                 Summary = result.Summary,
+                FrameOrigin = imageResult.FrameOrigin,
+                Provider = provider.Name,
                 ItemResults = result.Items.Select(item => new SmokeItemReceipt
                 {
                     Order = item.ItemOrder,
@@ -102,6 +111,8 @@ public static class AcceptanceSmokeRunner
         public InspectionVerdict Verdict { get; init; }
         public int ExitCode { get; init; }
         public string Summary { get; init; } = string.Empty;
+        public string? FrameOrigin { get; init; }
+        public string Provider { get; init; } = string.Empty;
         public List<SmokeItemReceipt> ItemResults { get; init; } = [];
     }
 

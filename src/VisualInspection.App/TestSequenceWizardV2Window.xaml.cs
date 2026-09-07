@@ -9,14 +9,19 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using VisualInspection.App.Demo;
+using VisualInspection.Core.Configuration;
+using VisualInspection.Core.V2.Configuration;
 using VisualInspection.App.ViewModels.V2;
+using VisualInspection.Infrastructure.Analysis;
+using VisualInspection.Infrastructure.V2.Persistence;
 
 namespace VisualInspection.App;
 
 public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 {
-    private const double RoiReferenceWidth = 640;
-    private const double RoiReferenceHeight = 480;
+    private const double DefaultRoiReferenceWidth = 640;
+    private const double DefaultRoiReferenceHeight = 480;
     private readonly FrameworkElement[] _wizardPanels;
     private readonly FrameworkElement[] _testBlockStagePanels;
     private readonly ObservableCollection<PoseStepPreview> _emptyPoseSteps = [];
@@ -36,48 +41,52 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     private int _nextCustomTestStepIndex = 1;
     private bool _isRestoringPoseActionSnapshot;
     private bool _isRefreshingCompatibleInspectionModels;
-    private ModelPreview? _inspectionModelAtDropDownOpen;
     private readonly string[] _sourceAddresses = [string.Empty, string.Empty, string.Empty, string.Empty];
     private bool _isSwitchingSourceKind;
 
+    internal bool SuppressSequenceExportForSmoke { get; set; }
+    internal bool SuppressApplyToOperatorForSmoke { get; set; }
+    internal bool SuppressModelSelectionDialogForSmoke { get; set; }
+
+    public ProjectConfigurationV2? AppliedProject { get; private set; }
+
     public TestSequenceWizardV2Window()
-        : this(false)
+        : this(false, null)
     {
     }
 
     internal TestSequenceWizardV2Window(bool returnToOperatorOnCompletion)
+        : this(returnToOperatorOnCompletion, null)
+    {
+    }
+
+    internal TestSequenceWizardV2Window(
+        bool returnToOperatorOnCompletion,
+        ProjectConfiguration? initialProject)
     {
         _returnToOperatorOnCompletion = returnToOperatorOnCompletion;
         InitializeComponent();
 
         Steps =
         [
-            new(0, "01", "项目信息", "填写项目、工位、测试序列和版本。"),
+            new(0, "01", "项目信息", "填写项目、工位、型号和版本。"),
             new(1, "02", "选择图源", "图片文件夹与视频文件夹二选一；USB 和工业相机暂列为待开发。"),
             new(2, "03", "导入模型", "建立项目模型库，可连续导入多个 ONNX / PT 模型。"),
-            new(3, "04", "测试步设置", "测试步按列表从上到下执行；在基本信息中配置检测子项，姿态模型按需弹出动作顺序。"),
-            new(4, "05", "检查完成", "汇总检查测试步、检测子项、姿态动作顺序与自定义函数。")
+            new(3, "04", "测试步设置", "测试步按列表从上到下执行；在基本信息中配置检测标签，姿态模型按需弹出动作顺序。"),
+            new(4, "05", "应用与导出", "检查配置后，可直接应用到当前操作台，也可另行选择位置导出 Sequence 与对应模型。")
         ];
 
         Models =
         [
-            new("Fan 主体检测", "fan.onnx", 0, true, ["fan", "hub", "housing"]),
+            new(SampleProjectFactory.SampleModelName, "fan.onnx", 0, true,
+                ["Labell", "Black_wire", "white_wire", "reverse_Labell", "reverse_Black_wire", "reverse_white_wire"]),
             new("叶片缺陷检测", "blade-defect.onnx", 0, true, ["blade_defect", "crack"]),
             new("装配姿态时序", "assembly-pose.onnx", 1, false, ["取件", "放置", "按压到位"])
         ];
 
         InspectionItems =
         [
-            new("TS-FAN-PRESENT", "风扇到位", 0, true, Models[0])
-            {
-                AllowSequenceInvocation = true,
-                ExternalTriggerEnabled = true,
-                TriggerSignal = "PLC.Line1.FanPresent",
-                TriggerConditionIndex = 0,
-                TriggerDebounceMsText = "50"
-            },
-            new("TS-BLADE-DEFECT", "叶片缺陷", 0, true, Models[1]),
-            new("TS-PICK-PLACE", "拿取与放置", 1, false, Models[2], ["取件", "放置", "按压到位"])
+            CreateDefaultFanInspectionItem(Models[0])
         ];
 
         Editor = new TestSequenceWizardV2ViewModel(Models, InspectionItems);
@@ -117,15 +126,78 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         InspectionItemsList.SelectedIndex = 0;
         SelectedInspectionItem = InspectionItems[0];
         _wizardReady = true;
+        if (initialProject is not null)
+        {
+            V2DraftMapper.ApplyProject(Editor, ProjectConfigurationV1Migrator.Migrate(initialProject));
+            Editor_DraftApplied(this, EventArgs.Empty);
+        }
+
         UpdateSourceSettingsPanels(Editor.SourceKindIndex);
         UpdateRuleEditorState();
         NavigateTo(0);
 
         if (_returnToOperatorOnCompletion)
         {
-            PreviewModeText.Text = "前端界面确认稿";
+            PreviewModeText.Text = "sequence 设置、应用与导出";
             ClosePreviewButton.Content = "返回操作台";
         }
+    }
+
+    private static InspectionItemPreview CreateDefaultFanInspectionItem(ModelPreview model)
+    {
+        var item = new InspectionItemPreview("TS-FAN-CHECK", "风扇检测", 0, true, model)
+        {
+            AllowSequenceInvocation = true,
+            ExternalTriggerEnabled = true,
+            TriggerSignal = "PLC.Line1.FanPresent",
+            TriggerConditionIndex = 0,
+            TriggerDebounceMsText = "50",
+            RuleLogicalOperatorIndex = 0,
+            TargetLabel = "Labell",
+            RuleMetricIndex = 0,
+            RuleMethodIndex = 0,
+            ExpectedCountText = "3",
+            ConfidenceThresholdText = "0.5",
+            RuleOutcomeIndex = 0
+        };
+
+        item.DetectionChildren.Clear();
+        AddDefaultFanRule(item, model, "Labell", 0, "3", 0);
+        AddDefaultFanRule(item, model, "Black_wire", 0, "3", 0);
+        AddDefaultFanRule(item, model, "white_wire", 0, "1", 0);
+        AddDefaultFanRule(item, model, "reverse_Labell", 2, "0", 1);
+        AddDefaultFanRule(item, model, "reverse_Black_wire", 2, "0", 1);
+        AddDefaultFanRule(item, model, "reverse_white_wire", 2, "0", 1);
+        return item;
+    }
+
+    private static void AddDefaultFanRule(
+        InspectionItemPreview item,
+        ModelPreview model,
+        string label,
+        int methodIndex,
+        string threshold,
+        int outcomeIndex)
+    {
+        var method = methodIndex == 2 ? ">" : "=";
+        var outcome = outcomeIndex == 1 ? "Fail" : "Pass";
+        item.DetectionChildren.Add(new DetectionChildPreview(
+            label,
+            "整张图",
+            $"识别数量 {method} {threshold} 时 {outcome} · 置信度阈值 0.5"));
+        if (item.DetectionChildren.Count == 1)
+        {
+            return;
+        }
+
+        item.AdditionalRules.Add(new RulePreviewViewModel(label, model)
+        {
+            MetricIndex = 0,
+            RuleMethodIndex = methodIndex,
+            ThresholdText = threshold,
+            ConfidenceText = "0.5",
+            OutcomeIndex = outcomeIndex
+        });
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -295,13 +367,30 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     public void ShowPoseContentStepForPreview()
     {
-        var poseItem = InspectionItems.First(item => item.TypeIndex == 1);
+        var poseItem = InspectionItems.FirstOrDefault(item => item.TypeIndex == 1)
+            ?? CreatePosePreviewItem();
         InspectionItemsList.SelectedItem = poseItem;
         SelectedInspectionItem = poseItem;
         NavigateTo(3);
         ShowTestBlockStage(0);
         OpenPoseActionEditor();
         UpdateLayout();
+    }
+
+    private InspectionItemPreview CreatePosePreviewItem()
+    {
+        var poseModel = Models.First(model => model.TypeIndex == 1);
+        var poseItem = new InspectionItemPreview(
+            "TS-POSE-PREVIEW",
+            "姿态动作预览",
+            1,
+            false,
+            poseModel,
+            ["取件", "放置", "按压到位"]);
+        TrackInspectionItem(poseItem);
+        InspectionItems.Add(poseItem);
+        Editor.RefreshSummaries();
+        return poseItem;
     }
 
     public void ShowTargetContentStepForPreview()
@@ -353,6 +442,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     }
 
     public Rect RoiLogicalRect => _roiLogicalRect;
+
+    internal Rect RoiImageViewport => GetRoiImageViewport();
 
     private void StepButton_Click(object sender, RoutedEventArgs e)
     {
@@ -410,7 +501,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         {
             UpdateTypePanels();
             UpdateTriggerEditorState();
-            FooterHintText.Text = $"测试步设置 · 当前模块：{TestBlockModuleTitles[_currentTestBlockStageIndex]}；全部功能模块统一作为一个测试步校验。";
+            FooterHintText.Text = $"测试步设置 · {TestBlockModuleTitles[_currentTestBlockStageIndex]}";
+            FooterHintText.ToolTip = "基本信息与自定义函数共同属于当前测试步，并统一参与保存校验。";
         }
     }
 
@@ -446,16 +538,33 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         if (CurrentStepIndex == Steps.Count - 1)
         {
-            CompleteReview();
+            ApplyReviewToOperator();
             return;
         }
 
         NavigateTo(CurrentStepIndex + 1);
     }
 
+    private async void ExportSequenceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsStepValid(Steps.Count - 1, out var validationMessage))
+        {
+            FooterHintText.Text = validationMessage;
+            return;
+        }
+
+        await CompleteReviewAsync();
+    }
+
     private void AddInspectionItem_Click(object sender, RoutedEventArgs e)
     {
-        var defaultModel = Models.FirstOrDefault(model => model.TypeIndex == 0) ?? Models[0];
+        var defaultModel = Models.FirstOrDefault(model => model.TypeIndex == 0) ?? Models.FirstOrDefault();
+        if (defaultModel is null)
+        {
+            FooterHintText.Text = "模型库为空。请先在第 3 步添加并选择模型文件。";
+            NavigateTo(2);
+            return;
+        }
         string functionCode;
         do
         {
@@ -520,7 +629,24 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             SelectedModel.FileName = dialog.FileName;
             await using var stream = new FileStream(dialog.FileName, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, true);
             SelectedModel.Sha256 = Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToLowerInvariant();
-            FooterHintText.Text = "已选择模型文件；当前继续确认模型名称、类型和标签界面。";
+            if (string.Equals(Path.GetExtension(dialog.FileName), ".onnx", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var labels = OnnxModelLabelImporter.Import(dialog.FileName);
+                    SelectedModel.ReplaceLabels(labels);
+                    RepairBindingsAfterLabelReplacement(SelectedModel);
+                    FooterHintText.Text = $"已选择模型文件并识别 {labels.Count} 个标签；可用加号、减号或直接改名继续调整。";
+                }
+                catch (Exception labelException) when (labelException is InvalidDataException or NotSupportedException)
+                {
+                    FooterHintText.Text = $"模型文件已选择，但未自动识别标签：{labelException.Message} 请使用下方加号、减号或直接改名。";
+                }
+            }
+            else
+            {
+                FooterHintText.Text = "已选择模型文件；请使用下方加号、减号或直接改名维护标签。";
+            }
         }
         catch (Exception exception)
         {
@@ -564,28 +690,121 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             return;
         }
 
-        if (Models.Count <= 1)
-        {
-            FooterHintText.Text = "项目模型库至少保留 1 个模型；最后一个模型不能删除。";
-            return;
-        }
-
-        if (InspectionItems.Any(item => ReferenceEquals(item.Model, SelectedModel)))
-        {
-            FooterHintText.Text = "该模型已被测试步绑定；请先在第 4 步改绑，再删除模型。";
-            return;
-        }
-
         var removedModelName = SelectedModel.Name;
         var previousIndex = Models.IndexOf(SelectedModel);
+        var dependentItems = InspectionItems.Where(item => ReferenceEquals(item.Model, SelectedModel)).ToArray();
+        foreach (var item in dependentItems)
+        {
+            item.PropertyChanged -= ConfigurationPropertyChanged;
+            foreach (var poseStep in item.PoseSteps)
+            {
+                poseStep.PropertyChanged -= ConfigurationPropertyChanged;
+            }
+
+            Editor.RemoveStep(item);
+            InspectionItems.Remove(item);
+        }
+
         SelectedModel.PropertyChanged -= ConfigurationPropertyChanged;
         Models.Remove(SelectedModel);
         RefreshCompatibleInspectionModels(repairSelection: true);
         Editor.MarkDirty();
-        ModelItemsList.SelectedIndex = Math.Clamp(previousIndex, 0, Models.Count - 1);
+        ModelItemsList.SelectedIndex = Models.Count == 0 ? -1 : Math.Clamp(previousIndex, 0, Models.Count - 1);
         SelectedModel = ModelItemsList.SelectedItem as ModelPreview;
+        InspectionItemsList.SelectedIndex = InspectionItems.Count == 0 ? -1 : 0;
+        SelectedInspectionItem = InspectionItemsList.SelectedItem as InspectionItemPreview;
         RefreshStepCompletionStates();
-        FooterHintText.Text = $"已删除模型“{removedModelName}”；当前选中“{SelectedModel?.Name}”。";
+        FooterHintText.Text = dependentItems.Length == 0
+            ? $"已删除模型“{removedModelName}”；模型库可保持为空。"
+            : $"已删除模型“{removedModelName}”及其绑定的 {dependentItems.Length} 个测试步；请重新添加模型和测试步。";
+    }
+
+    private void AddModelLabel_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedModel is null)
+        {
+            return;
+        }
+
+        var label = NewModelLabelTextBox.Text.Trim();
+        if (!SelectedModel.TryAddLabel(label, out var error))
+        {
+            FooterHintText.Text = error;
+            return;
+        }
+
+        NewModelLabelTextBox.Clear();
+        RepairBindingsAfterLabelReplacement(SelectedModel);
+        FooterHintText.Text = $"已添加标签“{label}”。";
+    }
+
+    private void RemoveModelLabel_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedModel is null || sender is not Button { CommandParameter: string label })
+        {
+            return;
+        }
+
+        if (!SelectedModel.TryRemoveLabel(label))
+        {
+            return;
+        }
+
+        RepairBindingsAfterLabelReplacement(SelectedModel);
+        FooterHintText.Text = $"已删除标签“{label}”。";
+    }
+
+    private void ModelLabelTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (SelectedModel is null || sender is not TextBox { Tag: string oldLabel } textBox)
+        {
+            return;
+        }
+
+        var newLabel = textBox.Text.Trim();
+        if (!SelectedModel.TryRenameLabel(oldLabel, newLabel, out var error))
+        {
+            textBox.Text = oldLabel;
+            FooterHintText.Text = error;
+            return;
+        }
+
+        RenameBoundLabel(SelectedModel, oldLabel, newLabel);
+        FooterHintText.Text = $"标签“{oldLabel}”已改名为“{newLabel}”。";
+    }
+
+    private void RepairBindingsAfterLabelReplacement(ModelPreview model)
+    {
+        foreach (var item in InspectionItems.Where(item => ReferenceEquals(item.Model, model)))
+        {
+            item.RepairLabels();
+        }
+
+        if (SelectedInspectionItem is not null)
+        {
+            DetectionEditor.Load(SelectedInspectionItem);
+        }
+
+        Editor.MarkDirty();
+        Editor.RefreshSummaries();
+        RefreshStepCompletionStates();
+    }
+
+    private void RenameBoundLabel(ModelPreview model, string oldLabel, string newLabel)
+    {
+        foreach (var item in InspectionItems.Where(item => ReferenceEquals(item.Model, model)))
+        {
+            item.RenameLabel(oldLabel, newLabel);
+        }
+
+        if (SelectedInspectionItem is not null)
+        {
+            DetectionEditor.Load(SelectedInspectionItem);
+        }
+
+        Editor.MarkDirty();
+        Editor.RefreshSummaries();
+        RefreshStepCompletionStates();
     }
 
     private void ModelItemsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -650,6 +869,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         InspectionItemsList.SelectedItem = item;
         SelectedInspectionItem = item;
         RefreshStepCompletionStates();
+        ChooseInspectionModel(item);
     }
 
     private void InspectionTypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -685,37 +905,41 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
     internal void SelectInspectionTypeForSmoke(int typeIndex) =>
         ApplyInspectionTypeSelection(typeIndex, openPoseEditor: true);
 
-    private void InspectionModelComboBox_DropDownOpened(object? sender, EventArgs e) =>
-        _inspectionModelAtDropDownOpen = SelectedInspectionItem?.Model;
-
-    private void InspectionModelComboBox_DropDownClosed(object? sender, EventArgs e)
+    private void ChooseInspectionModel_Click(object sender, RoutedEventArgs e)
     {
-        var modelBeforeOpen = _inspectionModelAtDropDownOpen;
-        _inspectionModelAtDropDownOpen = null;
-        if (!_wizardReady ||
-            _isRefreshingCompatibleInspectionModels ||
-            InspectionModelComboBox.SelectedItem is not ModelPreview model ||
-            ReferenceEquals(modelBeforeOpen, model))
+        if (SelectedInspectionItem is not { } item)
         {
             return;
         }
 
-        ApplyInspectionModelSelection(model, openEditor: true);
+        ChooseInspectionModel(item);
     }
 
-    private void InspectionModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void ChooseInspectionModel(InspectionItemPreview item)
     {
-        if (!_wizardReady ||
-            _isRefreshingCompatibleInspectionModels ||
-            InspectionModelComboBox.IsDropDownOpen ||
-            !InspectionModelComboBox.IsKeyboardFocusWithin ||
-            InspectionModelComboBox.SelectedItem is not ModelPreview model ||
-            ReferenceEquals(SelectedInspectionItem?.Model, model))
+        if (!ReferenceEquals(SelectedInspectionItem, item))
+        {
+            InspectionItemsList.SelectedItem = item;
+            SelectedInspectionItem = item;
+        }
+
+        RefreshCompatibleInspectionModels(repairSelection: false);
+        if (CompatibleInspectionModels.Count == 0)
+        {
+            FooterHintText.Text = $"项目模型库中没有与“{item.TypeLabel}”匹配的模型，请先返回第 3 步添加模型。";
+            return;
+        }
+
+        if (SuppressModelSelectionDialogForSmoke)
         {
             return;
         }
 
-        Dispatcher.BeginInvoke(new Action(() => ApplyInspectionModelSelection(model, openEditor: true)));
+        var dialog = new ModelSelectionDialog(CompatibleInspectionModels, item.Model) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.SelectedModel is { } model)
+        {
+            ApplyInspectionModelSelection(model, openEditor: true);
+        }
     }
 
     private void ApplyInspectionModelSelection(ModelPreview model, bool openEditor)
@@ -795,7 +1019,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         ShowTestBlockStage(0);
         _poseActionEditorSnapshot = PoseActionEditorSnapshot.Capture(item);
-        PoseActionEditorStatusText.Text = "按从左到右的顺序配置；保存后返回基本信息。";
+        PoseActionEditorStatusText.Text = "动作设置";
         Step5Panel.Visibility = Visibility.Visible;
         UpdateLayout();
     }
@@ -861,7 +1085,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 !IsNonNegativeInteger(action.MinimumHoldMsText) ||
                 !IsPositiveInteger(action.MaximumWaitMsText)))
         {
-            validationMessage = "请补全每个动作的名称、姿态模型、Label、置信度、保持时间和最大等待时间。";
+            validationMessage = "请补全每个动作的名称、姿态模型、检测标签、置信度、保持时间和最大等待时间。";
             return false;
         }
 
@@ -896,7 +1120,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         DetectionEditor.Load(item);
         DetectionLabelEditorOverlay.Visibility = Visibility.Collapsed;
         DetectionEditorOverlay.Visibility = Visibility.Visible;
-        DetectionEditorStatusText.Text = "逐个选择 Label；每次保存只新增或更新当前 Label，不会清除其他已配置项。";
+        DetectionEditorStatusText.Text = "检测标签配置";
         UpdateLayout();
     }
 
@@ -934,7 +1158,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             string.Equals(candidate.Label, child.Label, StringComparison.Ordinal));
         if (option is null)
         {
-            DetectionEditorStatusText.Text = $"当前模型中找不到 Label“{child.Label}”，请先确认模型绑定。";
+            DetectionEditorStatusText.Text = $"当前模型中找不到检测标签“{child.Label}”，请先确认模型绑定。";
             return;
         }
 
@@ -950,8 +1174,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         DetectionEditor.BeginLabelEdit(option);
         DetectionLabelEditorStatusText.Text = option.IsConfigured
-            ? $"正在重新编辑 Label“{option.Label}”；保存只更新这一项。"
-            : $"正在配置新 Label“{option.Label}”；保存后可继续选择下一个。";
+            ? $"正在重新编辑检测标签“{option.Label}”；保存只更新这一项。"
+            : $"正在配置新检测标签“{option.Label}”；保存后可继续选择下一个。";
         DetectionLabelEditorOverlay.Visibility = Visibility.Visible;
 
         var selectedRoiName = option.RoiOptions.FirstOrDefault(roi => roi.IsSelected)?.Name;
@@ -978,7 +1202,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             DetectionEditor.Load(item);
         }
 
-        DetectionEditorStatusText.Text = "已取消当前 Label 的修改；之前保存的检测子项保持不变。";
+        DetectionEditorStatusText.Text = "已取消当前检测标签的修改；之前保存的检测标签保持不变。";
         _isRoiDrawing = false;
         _roiDragStart = null;
         RoiPreviewSurface.ReleaseMouseCapture();
@@ -991,8 +1215,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             label.RefreshSummaries();
             UpdateDetectionLabelEditorLayout();
             DetectionLabelEditorStatusText.Text = label.UseFullImage
-                ? $"Label“{label.Label}”将检测整张图。"
-                : $"Label“{label.Label}”将只检测：{label.ScopeSummary}。";
+                ? $"检测标签“{label.Label}”将检测整张图。"
+                : $"检测标签“{label.Label}”将只检测：{label.ScopeSummary}。";
         }
     }
 
@@ -1008,8 +1232,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         label.RefreshSummaries();
         DetectionLabelEditorStatusText.Text = label.UseRoi
-            ? $"Label“{label.Label}”当前检测：{label.ScopeSummary}。"
-            : $"Label“{label.Label}”将检测整张图。";
+            ? $"检测标签“{label.Label}”当前检测：{label.ScopeSummary}。"
+            : $"检测标签“{label.Label}”将检测整张图。";
     }
 
     internal void RefreshDetectionLabelScopeForSmoke() => RefreshActiveDetectionLabelScope();
@@ -1024,9 +1248,15 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             return;
         }
 
+        if (option.UseRoi && item.RoiBackgroundImage is null)
+        {
+            DetectionLabelEditorStatusText.Text = "请先导入一张标注底图，再框选 ROI。";
+            return;
+        }
+
         if (option.UseRoi && option.RoiOptions.All(roi => !roi.IsSelected))
         {
-            DetectionLabelEditorStatusText.Text = $"Label“{option.Label}”已选择 ROI 模式，请至少勾选 1 个区域。";
+            DetectionLabelEditorStatusText.Text = $"检测标签“{option.Label}”已选择 ROI 模式，请至少勾选 1 个区域。";
             return;
         }
 
@@ -1036,7 +1266,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
              (!IsNonNegativeInteger(DetectionEditor.UpperThresholdText) ||
               int.Parse(DetectionEditor.ThresholdText) > int.Parse(DetectionEditor.UpperThresholdText))))
         {
-            DetectionLabelEditorStatusText.Text = "请检查当前 Label 的阈值、范围与置信度。";
+            DetectionLabelEditorStatusText.Text = "请检查当前检测标签的阈值、范围与置信度。";
             return;
         }
 
@@ -1060,8 +1290,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         RefreshStepCompletionStates();
         DetectionLabelEditorOverlay.Visibility = Visibility.Collapsed;
         DetectionEditor.EndLabelEdit();
-        DetectionEditorStatusText.Text = $"Label“{option.Label}”已保存；当前共 {item.DetectionChildren.Count} 个检测子项，可继续配置下一个 Label。";
-        FooterHintText.Text = $"已保存 Label“{option.Label}”；其他已配置 Label 均已保留。";
+        DetectionEditorStatusText.Text = $"检测标签“{option.Label}”已保存；当前共 {item.DetectionChildren.Count} 个检测标签，可继续配置下一个。";
+        FooterHintText.Text = $"已保存检测标签“{option.Label}”；其他已配置检测标签均已保留。";
     }
 
     private void SynchronizeDetectionRules(InspectionItemPreview item)
@@ -1138,7 +1368,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         Editor.MarkDirty();
         Editor.RefreshSummaries();
         RefreshStepCompletionStates();
-        FooterHintText.Text = $"已从前端配置中移除检测子项“{child.Label}”。";
+        FooterHintText.Text = $"已移除检测标签“{child.Label}”。";
     }
 
     private void AddNamedRoi_Click(object sender, RoutedEventArgs e)
@@ -1333,11 +1563,6 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 !repairSelection ||
                 CompatibleInspectionModels.FirstOrDefault() is not { } replacement)
             {
-                if (CompatibleInspectionModels.Contains(item.Model))
-                {
-                    InspectionModelComboBox.SelectedItem = item.Model;
-                }
-
                 UpdateInspectionModelStatus();
                 return null;
             }
@@ -1351,7 +1576,6 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 }
             }
 
-            InspectionModelComboBox.SelectedItem = replacement;
             UpdateInspectionModelStatus();
             return replacement;
         }
@@ -1370,12 +1594,15 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         var typeName = item.TypeLabel;
         var hasCompatibleModel = CompatibleInspectionModels.Count > 0;
-        InspectionModelComboBox.IsEnabled = hasCompatibleModel;
+        ChooseInspectionModelButton.IsEnabled = hasCompatibleModel;
         InspectionModelStatusText.Foreground = hasCompatibleModel
             ? (Brush)FindResource("MutedTextBrush")
             : Brushes.DarkGoldenrod;
+        var compatibilityHint = $"仅显示与“{typeName}”匹配的模型；更换模型后按该模型的检测标签分别配置。";
+        ChooseInspectionModelButton.ToolTip = compatibilityHint;
+        InspectionModelStatusText.Visibility = hasCompatibleModel ? Visibility.Collapsed : Visibility.Visible;
         InspectionModelStatusText.Text = hasCompatibleModel
-            ? $"仅显示与“{typeName}”匹配的模型；更换模型后按该模型的 Label 分别配置。"
+            ? string.Empty
             : $"项目模型库中没有“{typeName}”模型，请先返回第 03 步导入或修改模型类型。";
     }
 
@@ -1496,8 +1723,71 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             "系统按画布顺序检查全部必选动作，全部满足时当前测试步通过。";
     }
 
+    private void ImportRoiBackground_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedInspectionItem is not { } item)
+        {
+            return;
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Filter = "图像文件 (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(dialog.FileName, UriKind.Absolute);
+            image.EndInit();
+            image.Freeze();
+            item.RoiBackgroundPath = dialog.FileName;
+            item.RoiBackgroundImage = image;
+            UpdateRoiReferenceFrame(item, image.PixelWidth, image.PixelHeight);
+            UpdateRoiVisual();
+            DetectionLabelEditorStatusText.Text = "标注底图已导入；现在可以在图上拖动框选唯一的 ROI。";
+            RefreshStepCompletionStates();
+        }
+        catch (Exception exception)
+        {
+            DetectionLabelEditorStatusText.Text = $"导入标注底图失败：{exception.Message}";
+        }
+    }
+
+    internal void SetRoiBackgroundForSmoke()
+    {
+        if (SelectedInspectionItem is not { } item)
+        {
+            return;
+        }
+
+        var image = new DrawingImage(new GeometryDrawing(
+            Brushes.LightGray,
+            null,
+            new RectangleGeometry(new Rect(0, 0, DefaultRoiReferenceWidth, DefaultRoiReferenceHeight))));
+        image.Freeze();
+        item.RoiBackgroundPath = "roi-smoke-background.png";
+        item.RoiBackgroundImage = image;
+        UpdateRoiReferenceFrame(item, DefaultRoiReferenceWidth, DefaultRoiReferenceHeight);
+        UpdateRoiVisual();
+    }
+
     private void RedrawRoiButton_Click(object sender, RoutedEventArgs e)
     {
+        if (SelectedInspectionItem?.RoiBackgroundImage is null)
+        {
+            DetectionLabelEditorStatusText.Text = "请先导入一张标注底图。";
+            return;
+        }
+
         RoiRegionRadioButton.IsChecked = true;
         RoiPreviewSurface.Focus();
         FooterHintText.Text = "请在右侧图像预览中按住鼠标左键拖动；松开后会更新 ROI 坐标。";
@@ -1509,9 +1799,24 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     private void RoiPreviewSurface_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (SelectedInspectionItem?.RoiBackgroundImage is null)
+        {
+            DetectionLabelEditorStatusText.Text = "请先导入一张标注底图，再框选 ROI。";
+            e.Handled = true;
+            return;
+        }
+
+        var pointerPosition = e.GetPosition(RoiPreviewSurface);
+        if (!GetRoiImageViewport().Contains(pointerPosition))
+        {
+            DetectionLabelEditorStatusText.Text = "请在实际图像区域内框选 ROI；灰色留白不属于图像。";
+            e.Handled = true;
+            return;
+        }
+
         RoiRegionRadioButton.IsChecked = true;
         _roiBeforeDrag = _roiLogicalRect;
-        _roiDragStart = ClampToRoiSurface(e.GetPosition(RoiPreviewSurface));
+        _roiDragStart = ClampToRoiSurface(pointerPosition);
         _isRoiDrawing = RoiPreviewSurface.CaptureMouse();
         if (!_isRoiDrawing)
         {
@@ -1617,21 +1922,25 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     private void ApplyRoiFromPreviewPoints(Point start, Point end)
     {
-        var surfaceWidth = Math.Max(1, RoiPreviewSurface.ActualWidth);
-        var surfaceHeight = Math.Max(1, RoiPreviewSurface.ActualHeight);
+        var item = SelectedInspectionItem;
+        var referenceWidth = item?.RoiReferenceWidth ?? DefaultRoiReferenceWidth;
+        var referenceHeight = item?.RoiReferenceHeight ?? DefaultRoiReferenceHeight;
+        var viewport = GetRoiImageViewport();
+        start = ClampToRoiSurface(start);
+        end = ClampToRoiSurface(end);
         var left = Math.Min(start.X, end.X);
         var top = Math.Min(start.Y, end.Y);
         var right = Math.Max(start.X, end.X);
         var bottom = Math.Max(start.Y, end.Y);
 
         _roiLogicalRect = new Rect(
-            Math.Round(left / surfaceWidth * RoiReferenceWidth),
-            Math.Round(top / surfaceHeight * RoiReferenceHeight),
-            Math.Round((right - left) / surfaceWidth * RoiReferenceWidth),
-            Math.Round((bottom - top) / surfaceHeight * RoiReferenceHeight));
-        if (SelectedInspectionItem is not null)
+            Math.Round((left - viewport.Left) / Math.Max(1, viewport.Width) * referenceWidth),
+            Math.Round((top - viewport.Top) / Math.Max(1, viewport.Height) * referenceHeight),
+            Math.Round((right - left) / Math.Max(1, viewport.Width) * referenceWidth),
+            Math.Round((bottom - top) / Math.Max(1, viewport.Height) * referenceHeight));
+        if (item is not null)
         {
-            SelectedInspectionItem.RoiRect = _roiLogicalRect;
+            item.RoiRect = _roiLogicalRect;
         }
 
         if (SelectedNamedRoi is not null)
@@ -1643,9 +1952,62 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         RefreshStepCompletionStates();
     }
 
-    private Point ClampToRoiSurface(Point point) => new(
-        Math.Clamp(point.X, 0, Math.Max(0, RoiPreviewSurface.ActualWidth)),
-        Math.Clamp(point.Y, 0, Math.Max(0, RoiPreviewSurface.ActualHeight)));
+    private Point ClampToRoiSurface(Point point)
+    {
+        var viewport = GetRoiImageViewport();
+        return new Point(
+            Math.Clamp(point.X, viewport.Left, viewport.Right),
+            Math.Clamp(point.Y, viewport.Top, viewport.Bottom));
+    }
+
+    private Rect GetRoiImageViewport()
+    {
+        var surfaceWidth = Math.Max(1, RoiPreviewSurface.ActualWidth);
+        var surfaceHeight = Math.Max(1, RoiPreviewSurface.ActualHeight);
+        var referenceWidth = Math.Max(1, SelectedInspectionItem?.RoiReferenceWidth ?? DefaultRoiReferenceWidth);
+        var referenceHeight = Math.Max(1, SelectedInspectionItem?.RoiReferenceHeight ?? DefaultRoiReferenceHeight);
+        var scale = Math.Min(surfaceWidth / referenceWidth, surfaceHeight / referenceHeight);
+        var width = referenceWidth * scale;
+        var height = referenceHeight * scale;
+        return new Rect((surfaceWidth - width) / 2, (surfaceHeight - height) / 2, width, height);
+    }
+
+    private void UpdateRoiReferenceFrame(InspectionItemPreview item, double width, double height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var previousWidth = Math.Max(1, item.RoiReferenceWidth);
+        var previousHeight = Math.Max(1, item.RoiReferenceHeight);
+        item.RoiRect = ScaleRoi(item.RoiRect, previousWidth, previousHeight, width, height);
+        foreach (var namedRoi in item.NamedRois)
+        {
+            namedRoi.Rect = ScaleRoi(namedRoi.Rect, previousWidth, previousHeight, width, height);
+        }
+
+        item.RoiReferenceWidth = width;
+        item.RoiReferenceHeight = height;
+        if (ReferenceEquals(item, SelectedInspectionItem))
+        {
+            _roiLogicalRect = SelectedNamedRoi?.Rect ?? item.RoiRect;
+        }
+    }
+
+    private static Rect ScaleRoi(
+        Rect roi,
+        double previousWidth,
+        double previousHeight,
+        double width,
+        double height)
+    {
+        var left = Math.Clamp(roi.Left / previousWidth * width, 0, width);
+        var top = Math.Clamp(roi.Top / previousHeight * height, 0, height);
+        var right = Math.Clamp(roi.Right / previousWidth * width, left, width);
+        var bottom = Math.Clamp(roi.Bottom / previousHeight * height, top, height);
+        return new Rect(left, top, right - left, bottom - top);
+    }
 
     private void UpdateRoiVisual()
     {
@@ -1654,10 +2016,13 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             return;
         }
 
-        var scaleX = RoiPreviewSurface.ActualWidth / RoiReferenceWidth;
-        var scaleY = RoiPreviewSurface.ActualHeight / RoiReferenceHeight;
-        var left = _roiLogicalRect.X * scaleX;
-        var top = _roiLogicalRect.Y * scaleY;
+        var referenceWidth = Math.Max(1, SelectedInspectionItem?.RoiReferenceWidth ?? DefaultRoiReferenceWidth);
+        var referenceHeight = Math.Max(1, SelectedInspectionItem?.RoiReferenceHeight ?? DefaultRoiReferenceHeight);
+        var viewport = GetRoiImageViewport();
+        var scaleX = viewport.Width / referenceWidth;
+        var scaleY = viewport.Height / referenceHeight;
+        var left = viewport.Left + _roiLogicalRect.X * scaleX;
+        var top = viewport.Top + _roiLogicalRect.Y * scaleY;
         var width = _roiLogicalRect.Width * scaleX;
         var height = _roiLogicalRect.Height * scaleY;
 
@@ -1667,8 +2032,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         RoiSelectionRectangle.Height = height;
         RoiSelectionRectangle.Visibility = width > 0 && height > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        Canvas.SetLeft(RoiSelectionLabel, Math.Min(left + 7, Math.Max(0, RoiPreviewSurface.ActualWidth - 110)));
-        Canvas.SetTop(RoiSelectionLabel, Math.Min(top + 7, Math.Max(0, RoiPreviewSurface.ActualHeight - 28)));
+        Canvas.SetLeft(RoiSelectionLabel, Math.Clamp(left + 7, viewport.Left, Math.Max(viewport.Left, viewport.Right - 110)));
+        Canvas.SetTop(RoiSelectionLabel, Math.Clamp(top + 7, viewport.Top, Math.Max(viewport.Top, viewport.Bottom - 28)));
         RoiSelectionLabel.Visibility = RoiSelectionRectangle.Visibility;
 
         RoiCoordinatesText.Text = $"X1 {(int)_roiLogicalRect.Left}  ·  Y1 {(int)_roiLogicalRect.Top}  ·  " +
@@ -1748,8 +2113,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         FolderSourceSettingsPanel.Visibility = Visibility.Visible;
         FolderSourceSettingsTitleText.Text = isVideoFolder ? "视频文件夹" : "图片文件夹";
         FolderSourceSettingsInfoGlyph.ToolTip = isVideoFolder
-            ? "请选择包含待检测视频的文件夹；当前仅确认路径界面。"
-            : "操作台每录入一个序列号并点击开始，只读取该文件夹中的下一张受支持图片。";
+            ? "请选择包含待检测视频的文件夹；视频运行时仍保持适配器门禁。"
+            : "请选择包含检测图片的文件夹；操作台每次读取下一张图片，并将图片主文件名作为序列号。";
         FolderSourceSettingsHintText.Text = isVideoFolder
             ? "当前先确认视频文件夹选择界面；视频解码、抽帧和时序逻辑留到功能开发阶段。"
             : "当前先确认图片文件夹选择界面；实际读取和检查逻辑留到功能开发阶段。";
@@ -1789,7 +2154,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             FolderPathTextBox.Text = dialog.FolderName;
             FooterHintText.Text = isVideoFolder
                 ? "已选择视频文件夹；本轮只保存前端路径，不执行视频解码或抽帧。"
-                : "已选择图片文件夹；本轮只确认前端路径。";
+                : "已选择图片文件夹；Folder 运行时将按图片文件名派生序列号。";
         }
     }
 
@@ -1859,7 +2224,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                     return true;
                 }
 
-                validationMessage = "第 1 步未完成：请填写项目名称、工位名称、测试序列名称和版本。";
+                validationMessage = "第 1 步未完成：请填写项目名称、工位名称、型号和版本。";
                 return false;
 
             case 1:
@@ -1962,7 +2327,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 {
                     invalidItem = item;
                     invalidStageIndex = 0;
-                    validationMessage = $"请为测试步“{item.Name}”至少添加 1 个检测子项。";
+                    validationMessage = $"请为测试步“{item.Name}”至少添加 1 个检测标签。";
                     return true;
                 }
 
@@ -1984,6 +2349,14 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                     invalidItem = item;
                     invalidStageIndex = 0;
                     validationMessage = $"请为测试步“{item.Name}”选择有效的模型标签。";
+                    return true;
+                }
+
+                if (item.UseRoi && item.RoiBackgroundImage is null)
+                {
+                    invalidItem = item;
+                    invalidStageIndex = 0;
+                    validationMessage = $"请为测试步“{item.Name}”导入标注底图后再配置 ROI。";
                     return true;
                 }
 
@@ -2113,11 +2486,34 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         int.TryParse(value, out var number) && number > 0;
 
     private static bool IsConfidence(string value) =>
-        double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var number) &&
-        number is >= 0 and <= 1;
+        string.IsNullOrWhiteSpace(value) ||
+        (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var number) &&
+         number is >= 0 and <= 1);
 
     private static bool IsSha256(string value) =>
         value.Length == 64 && value.All(Uri.IsHexDigit);
+
+    private void Window_Loaded(object sender, RoutedEventArgs e) => ConfigureToolTips(this);
+
+    private static void ConfigureToolTips(DependencyObject root)
+    {
+        if (root is FrameworkElement { ToolTip: not null } element)
+        {
+            ToolTipService.SetIsEnabled(element, true);
+            ToolTipService.SetInitialShowDelay(element, 150);
+            ToolTipService.SetBetweenShowDelay(element, 0);
+            ToolTipService.SetShowDuration(element, 20000);
+            ToolTipService.SetShowOnDisabled(element, true);
+            ToolTipService.SetPlacement(
+                element,
+                System.Windows.Controls.Primitives.PlacementMode.MousePoint);
+        }
+
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            ConfigureToolTips(VisualTreeHelper.GetChild(root, index));
+        }
+    }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
@@ -2224,16 +2620,21 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         var current = Steps[index];
         CurrentStepNumberText.Text = (index + 1).ToString();
         CurrentStepTitleText.Text = current.PageTitle;
+        CurrentStepTitleText.ToolTip = current.Description;
         CurrentStepDescriptionText.Text = current.Description;
         PreviousButton.IsEnabled = index > 0;
         NextButton.IsEnabled = true;
+        ExportSequenceButton.Visibility = index == Steps.Count - 1 ? Visibility.Visible : Visibility.Collapsed;
+        ExportSequenceButton.IsEnabled = true;
+        ExportSequenceButton.Content = "导出 Sequence 与模型";
         CompletionStatusBorder.Visibility = Visibility.Collapsed;
         NextButton.Content = index == Steps.Count - 1
-            ? _returnToOperatorOnCompletion ? "确认并返回操作台" : "确认检查流程"
+            ? "应用到当前操作台"
             : $"下一步：{Steps[index + 1].Title}";
-        FooterHintText.Text = index == Steps.Count - 1
-            ? "请检查当前前端配置；如需修改，可点击顶部步骤返回。"
-            : $"第 {index + 1} / {Steps.Count} 步 · 红色 * 为必填项，悬停信息图标可查看说明。";
+        FooterHintText.Text = $"第 {index + 1} / {Steps.Count} 步";
+        FooterHintText.ToolTip = index == Steps.Count - 1
+            ? "“应用”会切换当前操作台；“导出”会让你选择保存位置，两项互不依赖。"
+            : "红色 * 为必填项；操作说明请悬停信息图标、标题或控件查看。";
 
         if (index == 3)
         {
@@ -2244,12 +2645,11 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     private void UpdateReviewSummary()
     {
-        var requiredCount = InspectionItems.Count(item => item.IsRequired);
         var detectionChildCount = InspectionItems.Sum(item => item.DetectionChildren.Count);
         var actionCount = InspectionItems.Sum(item => item.TypeIndex == 1 ? item.PoseSteps.Count : 0);
 
-        ReviewTestBlocksSummaryText.Text = $"测试步 {InspectionItems.Count} 个 · 按列表从上到下执行 · 必选 {requiredCount} 个";
-        ReviewTriggerSummaryText.Text = $"自定义函数 {InspectionItems.Count} 个 · 检测子项 {detectionChildCount} 个 · 姿态动作 {actionCount} 个";
+        ReviewTestBlocksSummaryText.Text = $"测试步 {InspectionItems.Count} 个 · 从上到下执行 · 全部参与总判定";
+        ReviewTriggerSummaryText.Text = $"自定义函数 {InspectionItems.Count} 个 · 检测标签 {detectionChildCount} 个 · 姿态动作 {actionCount} 个";
         ReviewModelsSummaryText.Text = Models.Count == 0
             ? "尚未添加模型"
             : string.Join("；", Models.Select(model => $"{model.Name}（{model.TypeLabel}）"));
@@ -2260,19 +2660,135 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         Editor.RefreshSummaries();
     }
 
-    private void CompleteReview()
+    private void ApplyReviewToOperator()
+    {
+        try
+        {
+            var project = CreateCurrentProject();
+            if (_returnToOperatorOnCompletion && !SuppressApplyToOperatorForSmoke)
+            {
+                _ = ProjectConfigurationV2CompatibilityConverter.ToV1(project, AppContext.BaseDirectory);
+            }
+
+            AppliedProject = project;
+            CompletionStatusText.Text = _returnToOperatorOnCompletion
+                ? "配置已通过校验，正在切换当前操作台。"
+                : "配置已生成；当前预览窗口未连接操作台，仍可单独导出。";
+            CompletionStatusBorder.Visibility = Visibility.Visible;
+            FooterHintText.Text = _returnToOperatorOnCompletion
+                ? "当前配置将直接加载到操作台；导出是独立操作。"
+                : "当前配置已准备完成；请从操作台的“测试序列设置”进入以直接应用。";
+
+            if (SuppressApplyToOperatorForSmoke || !_returnToOperatorOnCompletion)
+            {
+                NextButton.Content = "已应用当前配置";
+                NextButton.IsEnabled = false;
+                return;
+            }
+
+            DialogResult = true;
+        }
+        catch (Exception exception)
+        {
+            AppliedProject = null;
+            FooterHintText.Text = $"无法应用到当前操作台：{exception.Message}";
+            MessageBox.Show(
+                this,
+                $"当前操作台无法加载这份配置。{Environment.NewLine}{Environment.NewLine}{exception.Message}",
+                "应用配置失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private ProjectConfigurationV2 CreateCurrentProject()
+    {
+        NormalizeInspectionItemsAsRequired();
+        var project = V2DraftMapper.ToProject(Editor);
+        var errors = ProjectConfigurationV2Validator.Validate(project)
+            .Where(issue => issue.Severity == V2ValidationSeverity.Error)
+            .ToArray();
+        if (errors.Length > 0)
+        {
+            throw new InvalidDataException(
+                "Sequence 配置校验失败：" +
+                string.Join("；", errors.Select(error => $"{error.Code} {error.Message}")));
+        }
+
+        return project;
+    }
+
+    private void NormalizeInspectionItemsAsRequired()
+    {
+        foreach (var item in InspectionItems)
+        {
+            item.IsRequired = true;
+        }
+    }
+
+    private async Task CompleteReviewAsync()
     {
         RefreshStepCompletionStates();
-        if (_returnToOperatorOnCompletion)
+        if (SuppressSequenceExportForSmoke)
         {
-            Close();
+            _ = CreateCurrentProject();
+            CompletionStatusText.Text = "导出前校验已完成；当前操作台配置未发生切换。";
+            CompletionStatusBorder.Visibility = Visibility.Visible;
+            ExportSequenceButton.Content = "导出验证已完成";
+            ExportSequenceButton.IsEnabled = false;
+            FooterHintText.Text = "Sequence 导出前校验已完成；仍可点击“应用到当前操作台”。";
             return;
         }
 
-        CompletionStatusBorder.Visibility = Visibility.Visible;
-        NextButton.Content = "配置检查已完成";
-        NextButton.IsEnabled = false;
-        FooterHintText.Text = "前端配置检查已完成；当前不进入保存、发布或运行功能开发。";
+        var safeModelName = string.Concat(Editor.SequenceName.Select(character =>
+            Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+        if (string.IsNullOrWhiteSpace(safeModelName))
+        {
+            safeModelName = "inspection-model";
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出 sequence 与对应模型",
+            Filter = "Visual Inspection sequence (*.sequence.json)|*.sequence.json",
+            FileName = $"{safeModelName}{PortableSequenceFile.FileSuffix}",
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            FooterHintText.Text = "已取消导出；配置仍保留在当前窗口。";
+            return;
+        }
+
+        var destinationPath = dialog.FileName.EndsWith(PortableSequenceFile.FileSuffix, StringComparison.OrdinalIgnoreCase)
+            ? dialog.FileName
+            : dialog.FileName + PortableSequenceFile.FileSuffix;
+        try
+        {
+            ExportSequenceButton.IsEnabled = false;
+            ExportSequenceButton.Content = "正在导出…";
+            var project = CreateCurrentProject();
+            var result = await PortableSequenceFile.ExportAsync(project, destinationPath, AppContext.BaseDirectory);
+            CompletionStatusText.Text = "Sequence 与对应模型已导出；当前操作台配置未发生切换。";
+            CompletionStatusBorder.Visibility = Visibility.Visible;
+            ExportSequenceButton.Content = "再次导出…";
+            ExportSequenceButton.IsEnabled = true;
+            FooterHintText.Text = $"已导出 sequence 和 {result.ModelPaths.Count} 个对应模型：{result.SequencePath}";
+            MessageBox.Show(
+                this,
+                $"sequence 与对应模型已导出。\n\n{result.SequencePath}\n\n请将同一目录中的 sequence 文件和模型文件一起交付。",
+                "导出完成",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            ExportSequenceButton.Content = "导出 Sequence 与模型";
+            ExportSequenceButton.IsEnabled = true;
+            FooterHintText.Text = $"导出失败：{exception.Message}";
+            MessageBox.Show(this, exception.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void Editor_DraftApplied(object? sender, EventArgs e)
@@ -2284,6 +2800,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         foreach (var item in InspectionItems)
         {
+            item.IsRequired = true;
             TrackInspectionItem(item);
         }
 
@@ -2459,6 +2976,10 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         private string _targetLabel;
         private bool _useRoi;
         private Rect _roiRect = new(120, 80, 400, 340);
+        private double _roiReferenceWidth = DefaultRoiReferenceWidth;
+        private double _roiReferenceHeight = DefaultRoiReferenceHeight;
+        private string _roiBackgroundPath = string.Empty;
+        private ImageSource? _roiBackgroundImage;
         private int _ruleMethodIndex;
         private string _expectedCountText = "1";
         private string _rangeMaximumCountText = "2";
@@ -2476,7 +2997,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         private int _frameInputPolicyIndex;
         private int _ruleLogicalOperatorIndex;
         private int _ruleMetricIndex;
-        private string _confidenceThresholdText = "0.50";
+        private string _confidenceThresholdText = "0.5";
         private int _ruleOutcomeIndex;
         private string _maxConcurrencyText = "1";
         private string _queueCapacityText = "1";
@@ -2522,8 +3043,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             AdditionalRules = [];
             NamedRois =
             [
-                new NamedRoiPreview("ROI-01", _roiRect),
-                new NamedRoiPreview("ROI-02", new Rect(300, 90, 220, 280))
+                new NamedRoiPreview("ROI", _roiRect)
             ];
             DetectionChildren = typeIndex != 1
                 ? [new DetectionChildPreview(_targetLabel, "整张图", "数量等于 1 时 Pass")]
@@ -2542,6 +3062,18 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         public ObservableCollection<ViewModels.V2.RulePreviewViewModel> AdditionalRules { get; }
         public ObservableCollection<DetectionChildPreview> DetectionChildren { get; }
         public ObservableCollection<NamedRoiPreview> NamedRois { get; }
+
+        public string RoiBackgroundPath
+        {
+            get => _roiBackgroundPath;
+            set => SetField(ref _roiBackgroundPath, value ?? string.Empty);
+        }
+
+        public ImageSource? RoiBackgroundImage
+        {
+            get => _roiBackgroundImage;
+            set => SetField(ref _roiBackgroundImage, value);
+        }
 
         public string Name
         {
@@ -2655,6 +3187,18 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         {
             get => _roiRect;
             set => SetField(ref _roiRect, value);
+        }
+
+        public double RoiReferenceWidth
+        {
+            get => _roiReferenceWidth;
+            set => SetField(ref _roiReferenceWidth, value > 0 ? value : DefaultRoiReferenceWidth);
+        }
+
+        public double RoiReferenceHeight
+        {
+            get => _roiReferenceHeight;
+            set => SetField(ref _roiReferenceHeight, value > 0 ? value : DefaultRoiReferenceHeight);
         }
 
         public int RuleMethodIndex
@@ -2983,6 +3527,52 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             }
         }
 
+        public void RepairLabels()
+        {
+            if (TypeIndex == 1)
+            {
+                return;
+            }
+
+            var validLabels = Model.Labels.ToHashSet(StringComparer.Ordinal);
+            if (!validLabels.Contains(TargetLabel))
+            {
+                TargetLabel = Model.Labels.FirstOrDefault() ?? string.Empty;
+            }
+
+            foreach (var child in DetectionChildren.Where(child => !validLabels.Contains(child.Label)).ToArray())
+            {
+                DetectionChildren.Remove(child);
+            }
+
+            foreach (var rule in AdditionalRules.Where(rule => !validLabels.Contains(rule.TargetLabel)).ToArray())
+            {
+                AdditionalRules.Remove(rule);
+            }
+        }
+
+        public void RenameLabel(string oldLabel, string newLabel)
+        {
+            if (string.Equals(TargetLabel, oldLabel, StringComparison.Ordinal))
+            {
+                TargetLabel = newLabel;
+            }
+
+            for (var index = 0; index < DetectionChildren.Count; index++)
+            {
+                var child = DetectionChildren[index];
+                if (string.Equals(child.Label, oldLabel, StringComparison.Ordinal))
+                {
+                    DetectionChildren[index] = new DetectionChildPreview(newLabel, child.ScopeSummary, child.RuleSummary);
+                }
+            }
+
+            foreach (var rule in AdditionalRules.Where(rule => string.Equals(rule.TargetLabel, oldLabel, StringComparison.Ordinal)))
+            {
+                rule.TargetLabel = newLabel;
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -3050,7 +3640,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             }
 
             Labels = new ObservableCollection<string>(labelNames);
-            LabelIds = stableIds;
+            LabelIds = new ObservableCollection<int>(stableIds);
             LabelDisplayEntries = new ObservableCollection<string>(
                 labelNames.Select((label, index) => $"ID {stableIds[index]} · {label}"));
         }
@@ -3216,7 +3806,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         }
 
         public ObservableCollection<string> Labels { get; }
-        public IReadOnlyList<int> LabelIds { get; }
+        public ObservableCollection<int> LabelIds { get; }
         public ObservableCollection<string> LabelDisplayEntries { get; }
         public bool HasValidLabelIds => LabelIds.Count == Labels.Count &&
                                         LabelIds.All(id => id >= 0) &&
@@ -3238,6 +3828,103 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         {
             get => _manualLabelsText;
             set => SetField(ref _manualLabelsText, value ?? string.Empty);
+        }
+
+        public void ReplaceLabels(IEnumerable<ModelLabelDefinition> labels)
+        {
+            var values = labels.ToArray();
+            Labels.Clear();
+            LabelIds.Clear();
+            foreach (var label in values)
+            {
+                Labels.Add(label.Name.Trim());
+                LabelIds.Add(label.Id);
+            }
+
+            AutoImportLabels = true;
+            SynchronizeLabelMetadata();
+        }
+
+        public bool TryAddLabel(string label, out string error)
+        {
+            label = label.Trim();
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                error = "标签名称不能为空。";
+                return false;
+            }
+
+            if (Labels.Contains(label, StringComparer.Ordinal))
+            {
+                error = $"标签“{label}”已经存在。";
+                return false;
+            }
+
+            var nextId = LabelIds.Count == 0 ? 0 : checked(LabelIds.Max() + 1);
+            Labels.Add(label);
+            LabelIds.Add(nextId);
+            AutoImportLabels = false;
+            SynchronizeLabelMetadata();
+            error = string.Empty;
+            return true;
+        }
+
+        public bool TryRemoveLabel(string label)
+        {
+            var index = Labels.IndexOf(label);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            Labels.RemoveAt(index);
+            LabelIds.RemoveAt(index);
+            AutoImportLabels = false;
+            SynchronizeLabelMetadata();
+            return true;
+        }
+
+        public bool TryRenameLabel(string oldLabel, string newLabel, out string error)
+        {
+            newLabel = newLabel.Trim();
+            var index = Labels.IndexOf(oldLabel);
+            if (index < 0)
+            {
+                error = "原标签已经不存在，请重新选择。";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(newLabel))
+            {
+                error = "标签名称不能为空。";
+                return false;
+            }
+
+            if (!string.Equals(oldLabel, newLabel, StringComparison.Ordinal) && Labels.Contains(newLabel, StringComparer.Ordinal))
+            {
+                error = $"标签“{newLabel}”已经存在。";
+                return false;
+            }
+
+            Labels[index] = newLabel;
+            AutoImportLabels = false;
+            SynchronizeLabelMetadata();
+            error = string.Empty;
+            return true;
+        }
+
+        private void SynchronizeLabelMetadata()
+        {
+            ManualLabelsText = string.Join(", ", Labels);
+            LabelDisplayEntries.Clear();
+            for (var index = 0; index < Labels.Count; index++)
+            {
+                LabelDisplayEntries.Add($"ID {LabelIds[index]} · {Labels[index]}");
+            }
+
+            OnPropertyChanged(nameof(DetailsLabel));
+            OnPropertyChanged(nameof(LabelPreviewTitle));
+            OnPropertyChanged(nameof(HasValidLabelIds));
         }
 
         public string? ResolveLabelName(int labelId)
@@ -3278,7 +3965,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         private int _ruleMethodIndex;
         private string _thresholdText = "1";
         private string _upperThresholdText = "2";
-        private string _confidenceText = "0.50";
+        private string _confidenceText = "0.5";
         private int _outcomeIndex;
         private DetectionLabelOptionPreview? _activeLabel;
 
@@ -3371,8 +4058,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         public int SelectedLabelCount => LabelOptions.Count(option => option.IsConfigured);
 
         public string SelectedLabelSummary => SelectedLabelCount == 0
-            ? "尚未配置 Label"
-            : $"已配置 {SelectedLabelCount} 个 Label";
+            ? "尚未配置检测标签"
+            : $"已配置 {SelectedLabelCount} 个检测标签";
 
         public string RuleSummary
         {
@@ -3395,7 +4082,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                     _ => $"= {ThresholdText}"
                 };
                 var outcome = OutcomeIndex == 1 ? "Fail" : "Pass";
-                return $"{metric} {method} 时 {outcome} · 置信度阈值 {ConfidenceText}";
+                var confidence = string.IsNullOrWhiteSpace(ConfidenceText) ? "0.5（默认）" : ConfidenceText;
+                return $"{metric} {method} 时 {outcome} · 置信度阈值 {confidence}";
             }
         }
 
@@ -3513,7 +4201,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         private int _ruleMethodIndex;
         private string _thresholdText = "1";
         private string _upperThresholdText = "2";
-        private string _confidenceText = "0.50";
+        private string _confidenceText = "0.5";
         private int _outcomeIndex;
 
         public DetectionLabelOptionPreview(string label)
@@ -3675,7 +4363,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                     _ => $"= {ThresholdText}"
                 };
                 var outcome = OutcomeIndex == 1 ? "Fail" : "Pass";
-                return $"{metric} {method} 时 {outcome} · 置信度阈值 {ConfidenceText}";
+                var confidence = string.IsNullOrWhiteSpace(ConfidenceText) ? "0.5（默认）" : ConfidenceText;
+                return $"{metric} {method} 时 {outcome} · 置信度阈值 {confidence}";
             }
         }
 
@@ -3758,7 +4447,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         private bool _isRequired;
         private ModelPreview _model;
         private string _actionCondition;
-        private string _confidenceThresholdText = "0.50";
+        private string _confidenceThresholdText = "0.5";
         private string _minimumHoldMsText = "300";
         private string _maximumWaitMsText = "5000";
 

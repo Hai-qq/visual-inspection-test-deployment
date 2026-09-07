@@ -4,19 +4,37 @@
 
 开发语言固定为 **C#**，使用 .NET 8、WPF 和 MVVM。产品主体不得改用 Python、C++、JavaScript/TypeScript 或其他语言；PowerShell 仅承担构建与验收编排，厂商原生运行库必须通过 C# 适配器隔离。
 
-## 当前分支状态
+## 从 GitHub 克隆并运行
 
-- 当前开发分支为 `codex/v2-production-foundation`，严格基于 `agent/v2-wizard-ui` 的 `780143945700b3b7a18a5056f6a0debd9cf62851`；`v1.0.0` 标签冻结旧版设置界面及其完整功能基线，现有 v1 Runner、配置和验收链继续作为兼容路径保留。
-- 当前分支保留并直接复用三栏操作员工作台。管理员顶栏只保留“测试序列设置 V2”，图源统一在该向导第 02 步配置，不再提供独立“图源设置”按钮。当前向导严格用于前端界面确认：底栏只保留“上一步 / 下一步”，最终页不显示 Draft、Schema/Runtime、Publish、Assign、Activate、Rollback、Deployment 或 Lifecycle。既有 V2 配置与运行基础仍保留在代码中，本轮不扩展、不从当前界面调用；现有 Operator 主运行入口继续使用 v1 兼容 Runner。
-- 操作员工作台已针对工位可读性放大整体字号和关键区域，`开始 / 停止 / 复位` 使用“图标 + 短文”的实体按钮形态；开始检测前必须先录入非空产品序列号，录入方式兼容人工输入、扫码枪和二维码回填，录入后仍须显式点击“开始”。每个序列号只触发一次单件检测；普通 Folder 示例只读取下一张图片，完成后清空输入并等待下一个序列号。基础 JSONL 运行日志把图片结果与该序列号绑定；工厂格式、重复策略和最终日志格式仍待样例。检测框和 ROI 标识继续叠加，但不再在画面上显示模型输出标签与置信度文字；右侧统计入口统一使用“合格率”。复杂规则详情保持固定区域并提供局部滚动，不挤占实时图像和右侧统计。
-- “测试序列设置 V2”保留 `项目信息 → 选择图源 → 导入模型 → 测试步设置 → 检查完成` 5 个顶层步骤。目标检测、图像分割与姿态测试步都只显示“基本信息、自定义函数”；目标检测和图像分割在基本信息选择 Model 后先打开 Label 列表，点选一个 Label 再打开该 Label 独立的整图/ROI 与判定配置。首次选择姿态/时序模型时自动弹出动作顺序配置，保存后返回基本信息显示摘要及“重新编辑动作顺序”入口，不再提供独立动作页签。测试步列表从上到下就是执行顺序，不再显示第二套 Sequence Plan 编辑区。
-- V2 步骤卡只有在本页必填校验通过并点击“下一步”确认后才显示“已完成”绿色；直接点击后续步骤不会把跳过的中间步骤补绿，已完成页的必填内容被清空后也会立即取消完成状态。
-- V2 的“导入模型”使用项目模型库；模型列表顶部并排提供“添加模型 / 删除当前”，删除始终作用于左侧当前选中模型，被测试步引用时需先改绑，项目至少保留 1 个模型。当前前端只显示模型名称、任务类型、模型文件和标签来源，任务类型保留目标检测、姿态/时序和图像分割，已移除图像分类选项。标签来源收拢为“自动识别/手动填写”下拉框，只有选择手动填写时才展开精简编辑区。Model Version、SHA-256、Adapter ID、Runtime Profile 和 Contract 等内部字段不在本轮前端显示；底层数据结构仍保留，待功能阶段再决定如何接入。
-- V2“测试步设置”使用一份有序测试步列表：新增项进入列表末尾，可用上下箭头调整，列表从上到下就是当前前端展示的执行顺序。独立调用计划、重复调用参数和内部 FunctionCode/InvocationId 均不在界面显示；底层映射与运行逻辑不属于本轮前端确认范围。
-- V2 的“图片文件夹”和“视频文件夹”现在是同组互斥图源，选择任一项后共用文件夹路径面板，并分别保留各自路径；不再默认把视频与图片组合使用。USB 摄像头和工业相机仅以灰态“待开发”卡保留位置，不显示设备参数，也不能选择。图片读取、视频解码/取帧以及 DirectShow/厂商 SDK 接入仍留待功能阶段。
-- 目标检测和图像分割只在基本信息绑定模型；检测类型提供“目标检测（单张图）/姿态动作（连续帧）/图像分割（单张图）”三项，模型下拉框只显示与当前检测类型匹配的项目模型。切换检测类型时自动改绑可用的同类模型；没有同类模型时明确提示返回第 03 步补充。绑定或修改模型任务类型时也会同步对应测试步类型。两种单帧类型共用逐 Label、整图/多 ROI 与判定配置前端，Label 弹窗只读显示该测试步当前模型，不再提供第二个模型选择入口。切换测试步时只显示当前测试步自己的检测子项；改绑模型后立即移除不属于新模型的旧子项，并按新模型重建 Label 列表。保存只新增或替换当前 Label，重新编辑任一 Label 不得清空其他已保存子项。ROI 可新增、删除和拖拽框选，勾选多个区域时右侧判定区实时显示当前区域名称；界面明确提示“仅适用于固定摄像头”。图像分割在本轮只补齐前端类别和配置状态，不代表分割推理、掩膜判定或 Runner 已接入。
-- Pose 的动作顺序、Model Binding、Label、Hold 和 Wait 集中在按需弹出的动作配置层中；保存后回到基本信息，取消则恢复弹出前的动作内容。目标检测、图像分割与姿态测试步均提供“自定义函数”页，页内可直接切换当前测试步且各步配置互不覆盖；当前只配置函数类型、名称、Python 文件、延时和说明，不执行 Python，也不代表后续工厂函数库已接入。
-- schema v2 仍保留正式 Trigger Binding、Invocation Policy 与 Runner 调度契约，外部 Signal Tag 到 PLC 地址的映射只存在于 `DeploymentBinding`；本轮前端不展示旧“触发与运行”演示表单，也未新增 PLC/IO/传感器连接能力。
+默认分支 `main` 包含当前操作员工作台、管理员测试序列设置界面及下述已实现功能的完整源码。无需复制原开发电脑上的 `bin`、`obj` 或 `artifacts`。
+
+在 Windows x64 上安装 .NET 8 SDK（包含 WPF 构建支持），然后执行：
+
+```powershell
+git clone https://github.com/Hai-qq/visual-inspection-test-deployment.git
+cd visual-inspection-test-deployment
+dotnet restore VisualInspection.sln
+dotnet build VisualInspection.sln --no-restore
+dotnet test VisualInspection.sln --no-build --no-restore
+dotnet run --project src/VisualInspection.App/VisualInspection.App.csproj --no-build
+```
+
+首次启动显示登录页。本地验收账户见下方“直接验收”；管理员登录后进入操作员工作台，点击右上角“测试序列设置”进入五步设置界面，操作员账户只开放执行与统计。恢复 NuGet 依赖需要联网。
+
+普通克隆首次运行会自动生成确定性图片与 `detections.json` 演示数据，用于检查完整操作流程，**不是实际模型推理**。真实 ONNX 推理、Sequence 导入导出及结果保存的代码均包含在仓库中；真实检测需提供符合下述契约的 ONNX 模型与本地图片。模型、现场图片和原电脑的运行配置不随源码公开上传。内置 Fan 模型的自包含演示包需另行提供脚本要求的 Fan 模型与图片才能构建，普通源码构建不依赖这些文件。
+
+## 当前实现状态
+
+- 当前实现由 `codex/v2-production-foundation` 同步到默认分支 `main`，延续 `agent/v2-wizard-ui` 的 `780143945700b3b7a18a5056f6a0debd9cf62851`；`v1.0.0` 标签冻结旧版设置界面及其完整功能基线，现有 v1 Runner、配置和验收链继续作为兼容路径保留。
+- 当前分支保留三栏操作员工作台。默认内置项目为“FAN-A01 视觉检测项目”，生产型号为 `FAN-A01`，演示包预装 `fan.onnx` 与 `IMG_1533.JPG`；唯一“风扇检测”测试步以 AND 组合 6 条标签规则。操作台顶栏提供“导入测试序列”和管理员“测试序列设置”，运行端继续通过经过验证的 v1 兼容 Runner 执行受支持的 ONNX Detection。
+- Folder 图源不再要求手工录入序列号：每次点击“开始”读取下一张图片，并把图片主文件名作为产品序列号。只有 Camera 图源在开始时弹出序列号窗口，确认后只执行一次检测；当前相机没有真实适配器时仍保持 NotReady。检测完成后的预览保留原始图片、检测框和模型原始英文 Output Label，不翻译为 Target 中文名，也不显示置信度；“当前检测项”使用“检测标签 / 判定逻辑 / 本次实测 / Result”表格。表格在运行前按当前 sequence 预加载数量、缺失数量、存在/不存在及比较条件，运行后填入实际值，Result 以红绿状态区分，并显示当前项的 AND/OR 组合逻辑。
+- 每次运行继续写内部 JSONL 审计，同时写生产 TXT：`机台|日期|时间|工站|型号|员工号|序列号|测试结果|图片地址|`。PASS/FAIL 图片分别保存到 `results\images\pass` 与 `results\images\fail`，文件名包含序列号、毫秒时间和结果；ERROR 没有可信当前帧时图片地址留空。当前员工号取登录用户名。
+- “测试序列设置”保留 `项目信息 → 选择图源 → 导入模型 → 测试步设置 → 应用与导出` 五步。项目信息使用真实产品型号格式，内置示例为 `FAN-A01`；每个 `.sequence.json` 只能包含一个型号。最终步骤把“应用到当前操作台”和“导出 Sequence 与模型”分成两个独立按钮：应用会保留当前设置中的本地图源绑定，校验后重建当前操作台，失败时保留原配置；导出会弹出保存位置并写逻辑文件及引用模型，不会自动切换或关闭操作台。导出模型写入 SHA-256，并剥离机台本地 Deployment Binding；操作台导入时校验 schema、单型号约束、模型存在性与哈希，Folder 图源在接收端统一解析为交付目录下的 `input`。
+- 模型库允许删到 0 个；删除被引用模型时同步移除相应测试步，避免悬空配置。选择 ONNX 后尝试读取标签元数据，标签通过加号、减号和直接改名人工维护，不再提供“自动/手动”下拉框。模型文件和图源按钮设置最小宽度，说明式提示移到 ToolTip。
+- 新增测试步后通过弹窗选择与检测类型兼容的模型。用户可见“检测子项”术语统一为“检测标签”。所有测试步统一参与序列执行和产品总判定，界面不再显示容易误解的“是否必选”；底层兼容字段仍保留。置信度字段移到规则区底部，默认 `0.5` 且可留空；其他必填字段继续使用红色 `*`。
+- ROI 配置只保留一个默认 ROI；必须先导入一张标注底图，之后才能拖动框选或保存 ROI。预览使用等比例 `Uniform` 显示，ROI 坐标按实际图像区域和导入图像像素尺寸映射，灰色留白不参与框选。标注底图只用于设置，不写入 sequence，也不作为生产运行输入。
+- 向导内的说明式 ToolTip 统一使用可见深色样式、约 150 ms 显示延迟、20 秒显示时长；信息图标扩展为至少 22 × 22 的透明命中区，禁用控件上的说明也可显示。
+- 目标检测、图像分割与姿态测试步仍只显示“基本信息、自定义函数”；图像分割、Pose/Temporal、PT、视频、相机/PLC/IO 和自定义 Python 若无对应 C# 适配器必须保持运行门禁，不因界面可配置而宣称已接入。
 - 新增 `VisualInspection.Runner`，显式按 `OrderedInvocations` 执行，提供 Trigger 去重/幂等、有界 Channel、背压、最大并发、Deadline、取消、迟到结果丢弃、帧关联、四种 Capture Policy、共享 Observation、结构化错误和 Line Result 锁存/Ack 状态机。
 - V2 Infrastructure 已实现模拟 Trigger/Camera/Model/Line Adapter、未配置 fail-closed Adapter、JSON 原子持久化、schema v1→v2 迁移、静态 ONNX YOLO E2E Detection CPU Adapter 和原始/编码帧预处理。**真实 PLC、IO、工业相机、GPU、PT、YOLO Raw、Classification、Segmentation、Pose Keypoint 和 Temporal Action Adapter 尚未接入**；Production 禁止 `detections.json`/Manifest、模拟器、未配置适配器和操作员调试选源，缺少真实就绪链时保持 NotReady，绝不回退产生 Pass。
 
@@ -32,13 +50,21 @@ dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --o
 dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v2-wizard-preview
 ```
 
-生成可双击直达 V2 确认稿的 Windows x64 自包含单文件 EXE：
+生成包含完整“登录 → 操作台 → V2 设计 → 返回操作台”路径及 Fan 模型/示例图的 Windows x64 自包含单文件 EXE：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\Build-FrontendDemo.ps1
 ```
 
-默认产物位于 `artifacts\frontend-demo-v0.2-YYYYMMDD-win-x64\VisualInspection.FrontendDemo.exe`。该演示 EXE 不要求目标机器另行安装 .NET 8 Desktop Runtime；它仅代表已确认的前端范围，不扩展视频读取、相机/PLC/IO、分割/姿态推理、自定义函数或 V2 生产运行能力。普通 `VisualInspection.App.exe` 的登录启动行为不变。
+默认产物位于 `artifacts\frontend-demo-v0.2-YYYYMMDD-win-x64\VisualInspection.FrontendDemo.exe`。双击后先显示登录页；管理员登录进入型号 `FAN-A01`、已加载 `IMG_1533.JPG` 的 Fan 操作台，点击“开始”后以 `IMG_1533` 作为序列号，由内置 `fan.onnx` 通过 ONNX Runtime CPU 执行一次分析，再由唯一的“风扇检测”测试步汇总 6 条 AND 规则；“测试序列设置”可直接应用当前配置，也可另选位置导出 Sequence 与模型。该演示 EXE 不要求目标机器另行安装 .NET 8 Desktop Runtime；首次登录后解包内置模型和图片可能需要数秒。此结果只证明指定模型与指定图片的接入链，不代表通用精度、现场节拍或生产能力；视频读取、相机/PLC/IO、分割/姿态推理、自定义函数及 V2 生产运行能力仍未扩展。
+
+生成 8.31 代表性 sequence、对应模型、说明文档和 SHA-256 清单：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\Build-SequenceDelivery.ps1
+```
+
+默认输出到 `artifacts\FAN-A01-Receiver-Package-20260829`，包含 `FAN-A01.sequence.json`、按型号命名的 `FAN-A01.onnx`、生产商操作台接入说明、`input\IMG_1533.JPG` 运行验证图和 SHA-256 清单。生产商只消费我方导出的 Sequence 与模型并开发操作台，不实现我方设置端、配置发布或版本迁移；代表图只用于让其操作台在导入后立即执行一次 Folder 验证，不是生产图片或模型性能证据。交付格式与导入步骤见 [Sequence 与模型交付说明](./docs/Sequence与模型交付说明.md)，会议变更和验收口径见 [8.27 SE 会议变更基线](./docs/8.27SE会议变更基线.md)。脚本不执行夸克上传。
 
 直接打开 USB 图源选中状态用于回归检查：
 
@@ -109,8 +135,8 @@ dotnet run --project src\VisualInspection.App\VisualInspection.App.csproj -- --v
 - 检测框按目标、模型绑定和置信度筛选；ROI 使用检测框中心点归属，支持参考尺寸缩放与多 ROI 去重，Full Image/ROI 数量会进入同一规则引擎；
 - 姿态项按顺序、连续保持时间和最大等待时间判定；
 - Pass、Fail、Error、Stopped 分离，右侧统计支持数量/比率切换；数量模式同时显示横向数量条和下方通过/不通过饼图，比率模式显示大圆环，Error 不进入两种图表；
-- 当前帧、精确 ROI、检测框、目标名、置信度、规则标准、实测值、逐项结果和运行日志会随执行更新；结构化日志按天写入 JSON Lines；
-- 首次启动自动生成 PASS/FAIL 两组可复现图片和带空间检测框的 `detections.json`，用于在没有真实模型/相机硬件时验收完整流程及统计；
+- 当前帧、精确 ROI、检测框和模型原始 Output Label 会随执行显示；Target 中文名只用于当前项及规则表。置信度继续用于检测筛选、规则判定与结构化记录，但不绘制在检测图上。规则标准、实测值、逐项结果和运行日志同步更新；结构化日志按天写入 JSON Lines；
+- 普通开发运行在没有真实模型/相机硬件时自动生成 Fan PASS/FAIL 两组可复现图片和带空间检测框的 `detections.json`；前端演示 EXE 则内置已验证的 `fan.onnx` 和 `IMG_1533.JPG`，优先执行真实 ONNX Runtime CPU 检测；
 - 提供端到端执行冒烟 `--acceptance-smoke`、主窗口/设置窗口渲染冒烟、正常启动生命周期冒烟、发布脚本和验收回执。
 
 内置 `detections.json` 仍是**确定性验收适配器，不是模型推理**，仅用于 v1 兼容验收、V2 Acceptance 与自动回归。V2 Production 明确禁止 Manifest 回退；真实推理当前只承诺上述 ONNX Detection 契约。原始 YOLO 输出、动态输入、Classification、Segmentation、Pose/Temporal、PT 安全加载、DirectShow、厂商相机、真实 Trigger/Line Adapter、生产账户管理和历史查询仍待适配。详细范围与步骤见 [验收说明](./docs/验收说明.md)。
@@ -127,9 +153,9 @@ artifacts\acceptance-zh-CN\VisualInspection.App.exe
 
 可复制压缩包：`artifacts\VisualInspection-v0.6.0-onnx-yolo-e2e-zh-CN-win-x64.zip`。
 
-运行环境为 Windows x64，需安装 .NET 8 Desktop Runtime。启动后先进入登录窗口。本地验收账户为管理员 `admin / Admin@123`、操作员 `operator / Operator@123`；先输入任意非空验收序列号，再点击“开始”，内置四项序列应全部“通过”，右侧“当前会话”的通过数只增加 1。固定密码仅用于本地验收。
+运行环境为 Windows x64，需安装 .NET 8 Desktop Runtime。启动后先进入登录窗口。本地验收账户为管理员 `admin / Admin@123`、操作员 `operator / Operator@123`；Folder 图源直接点击“开始”，程序以当前图片主文件名作为序列号，内置“风扇检测”单项及其 6 条 AND 规则应产生一个完整产品结果。固定密码仅用于本地验收。
 
-对于只包含普通检测项的 Folder Test Sequence，一个序列号只检测文件夹中的下一张受支持图片。再次检测必须重新录入序列号；同一应用会话内按文件夹排序逐张前进，到末尾后从第一张重新开始，不能再用一个序列号一次生成 15 个统计结果。
+对于只包含普通检测项的 Folder Test Sequence，每次“开始”只检测文件夹中的下一张受支持图片；同一应用会话内按文件夹排序逐张前进，到末尾后从第一张重新开始。Camera 图源才会在每次开始时弹窗录入序列号。
 
 端到端冒烟：
 
@@ -159,6 +185,9 @@ dotnet run --project src/VisualInspection.App/VisualInspection.App.csproj
 %LocalAppData%\VisualInspectionTestDeployment\users\users.json
 %LocalAppData%\VisualInspectionTestDeployment\acceptance-data\sample-set-*\
 %LocalAppData%\VisualInspectionTestDeployment\logs\inspection-YYYYMMDD.jsonl
+%LocalAppData%\VisualInspectionTestDeployment\results\logs\inspection-results-YYYYMMDD.txt
+%LocalAppData%\VisualInspectionTestDeployment\results\images\pass\
+%LocalAppData%\VisualInspectionTestDeployment\results\images\fail\
 %LocalAppData%\VisualInspectionTestDeployment\acceptance-smoke-result.json
 %LocalAppData%\VisualInspectionTestDeployment\v2-configuration\drafts\<draft-id>.json
 %LocalAppData%\VisualInspectionTestDeployment\v2-configuration\packages\<package-id>.json

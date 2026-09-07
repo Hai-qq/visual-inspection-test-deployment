@@ -199,6 +199,38 @@ public sealed class V2DraftMapperTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesRoiCoordinatesAndImportedImageReferenceSize()
+    {
+        var model = CreateModel("fan", 0, KnownAdapterIds.YoloEndToEndDetection, ["fan"]);
+        var item = new TestSequenceWizardV2Window.InspectionItemPreview("TS-FAN", "风扇", 0, true, model)
+        {
+            TargetLabel = "fan",
+            UseRoi = true,
+            RoiRect = new System.Windows.Rect(571, 428, 2856, 2142),
+            RoiReferenceWidth = 5712,
+            RoiReferenceHeight = 4284
+        };
+        var source = new TestSequenceWizardV2ViewModel(
+            new ObservableCollection<TestSequenceWizardV2Window.ModelPreview> { model },
+            new ObservableCollection<TestSequenceWizardV2Window.InspectionItemPreview> { item });
+        var project = V2DraftMapper.ToProject(source);
+        var target = new TestSequenceWizardV2ViewModel(
+            new ObservableCollection<TestSequenceWizardV2Window.ModelPreview>(),
+            new ObservableCollection<TestSequenceWizardV2Window.InspectionItemPreview>());
+
+        V2DraftMapper.ApplyProject(target, project);
+
+        var mappedRoi = Assert.Single(Assert.Single(project.TestStepCatalog).RuleSet!.Rules).Scope.Regions.Single();
+        var restored = Assert.Single(target.InspectionItems);
+        Assert.Equal(5712, mappedRoi.ReferenceWidth);
+        Assert.Equal(4284, mappedRoi.ReferenceHeight);
+        Assert.Equal(item.RoiRect, restored.RoiRect);
+        Assert.Equal(5712, restored.RoiReferenceWidth);
+        Assert.Equal(4284, restored.RoiReferenceHeight);
+        Assert.Equal(restored.RoiRect, restored.NamedRois.Single().Rect);
+    }
+
+    [Fact]
     public void RoundTrip_PreservesVideoFolderAsDistinctFrontendSource()
     {
         var source = new TestSequenceWizardV2ViewModel(

@@ -10,7 +10,7 @@ public sealed class RulePreviewViewModel : ObservableObject
     private int _metricIndex;
     private string _thresholdText = "1";
     private string _upperThresholdText = "2";
-    private string _confidenceText = "0.50";
+    private string _confidenceText = "0.5";
     private int _outcomeIndex;
 
     public RulePreviewViewModel(

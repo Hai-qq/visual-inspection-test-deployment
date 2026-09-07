@@ -1,5 +1,7 @@
 # Test Sequence Setting V2 Design QA
 
+> Current status (2026-08-29): Passes 1–16 below are retained as historical review evidence. Pass 17 and the current requirements/design/acceptance documents supersede their earlier product-model, optional-step, ToolTip, ROI-scaling and final-action decisions.
+
 - Source visual truth: local review reference only; the source image is not stored in this repository.
 - Historical implementation screenshots (Pass 1–10 evidence; not the current acceptance artifact):
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-preview.png`
@@ -10,8 +12,8 @@
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-rule-preview.png`
   - `%LocalAppData%\VisualInspectionTestDeployment\v2-wizard-trigger-preview.png`
 - Source pixels / density: 1872 × 1120 at 72 DPI
-- Current live review: isolated Release WPF windows were opened on 2026-08-21 with the in-app Windows control surface; the Operator and V2 wizard were inspected at 1368 × 855 in the light theme.
-- Current WPF evidence: centered five-step strip; primary image/camera plus local-video state; three visible model task types and conditional manual-label editor; normal/pose Basic Information and Custom Function tabs; normal Label selector plus per-Label detail modal; temporary pose action-order modal; custom-function form; Operator serial-number input, overlay simplification and qualification-rate naming.
+- Current live review: the isolated Release R2 WPF demo was opened on 2026-08-29 with the in-app Windows control surface. Live checks covered visible hover ToolTips, a real `5712 × 4284` ROI background rendered at its original ratio, and `设置 → 应用到当前操作台` rebuilding an ONNX-ready `FAN-A01` Operator while retaining the current Folder source. The packaged Fan acceptance smoke also completed the real ONNX Runtime CPU path.
+- Current WPF evidence: centered five-step strip; production-style model `FAN-A01`; mutually exclusive image/video Folder sources and disabled pending camera cards; three visible model task types; all test steps participating in the total verdict without a required/optional selector; add/remove/direct-edit labels; compatible-model selection dialog; one default ROI gated by an imported, aspect-ratio-preserved background image; visible dark hover ToolTips; normal/pose Basic Information and Custom Function tabs; temporary pose action-order modal; independent Apply and Export actions; Folder filename serial mapping and Camera-only serial dialog; sequence import/export; sequence-driven rule/result table; original-image Detection overlay containing boxes and original English Output Labels without Target translations or confidence text; qualification-rate naming.
 - Normalization: the source is a low-detail structural wireframe rather than a pixel specification. The full desktop frames were fitted to the same visual scale; differences caused only by density or the source's missing product detail were not filed as defects.
 
 ## Findings
@@ -22,8 +24,8 @@ No actionable P0, P1, or P2 findings remain.
 - Spacing and layout rhythm: the implementation preserves the source's ordered wizard-step row plus one dominant content region. The five workflow steps are centered as one group across the top. Both normal and pose test steps keep only Basic Information and Custom Function; their extra configuration appears as task-specific temporary dialogs. The model library and test-step editors retain a clear left-list/right-current-item rhythm, and primary actions remain visible above the persistent footer.
 - Colors and visual tokens: the source's outline structure is mapped to the project's Schneider-style pale green, dark green and neutral borders. Red is reserved for required markers; amber is reserved for non-persistent or explanatory notices.
 - Image quality and assets: the source contains no raster imagery, logo or decorative asset. Plus, minus and information controls use the Windows Segoe MDL2 icon family; pose-action sorting uses plain left/right arrows whose direction matches the horizontal action order.
-- Copy and content: all visible product copy is Simplified Chinese. “目标检测（单张图）”、“姿态动作（连续帧）” and “图像分割（单张图）” explain the type distinction at the point of choice. Frontend-only notices explicitly state that local video, segmentation, custom functions and serial-number traceability are not connected runtime capabilities.
-- Accessibility and behavior: semantic WPF radio cards, buttons, list items, check boxes, combo boxes and inputs are keyboard-focusable. Help controls expose their ToolTip text as accessible descriptions. The Release construction smoke exercises centered five-step geometry, image/camera plus video selection, three-task model UI, conditional manual-label editing, one top-to-bottom test-step list with move controls and no separate Sequence Plan panel, Basic Information/Custom Function tabs, model-to-test-step type synchronization including Segmentation, Model-triggered Label selection, one-Label-at-a-time detail dialogs, additive save and targeted re-edit retention, per-label whole-image/multi-ROI scope and judgment, pose-model-triggered action popup, save-to-summary flow, per-step custom-function state, Operator serial-number/explicit-start state, qualification-rate copy, ToolTips and final confirmation.
+- Copy and content: all visible product copy is Simplified Chinese. “目标检测（单张图）”、“姿态动作（连续帧）” and “图像分割（单张图）” explain the type distinction at the point of choice. Frontend-only notices explicitly state that video, segmentation and custom functions are not connected runtime capabilities; Folder filename serial mapping and the supported ONNX Detection path are implemented rather than presented as placeholders.
+- Accessibility and behavior: semantic WPF radio cards, buttons, list items, check boxes, combo boxes and inputs are keyboard-focusable. Help controls expose their ToolTip text as accessible descriptions and use a minimum `22 × 22` transparent hit target, short initial delay and long visible duration. The Release construction smoke exercises the five-step geometry, mutually exclusive Folder sources, disabled cameras, three-task model UI, label add/remove/direct-edit, one top-to-bottom test-step list, compatible-model dialogs, one default ROI plus aspect-ratio background-image gate, Basic Information/Custom Function tabs, pose-action popup, per-step custom-function state, independent Apply/Export actions, Folder filename serial mapping, Camera serial dialog construction, sequence import/export, original-English-label-only image overlay, sequence-driven rule/result table, qualification-rate copy and ToolTips.
 - Step semantics: pale green completion is reserved for a validated, explicitly confirmed step. Direct navigation changes only the current-step outline; skipped cards stay neutral, and a confirmed card returns to neutral as soon as one of its required values becomes invalid.
 - Viewport resilience: the current 1368 × 855 live windows have no clipped primary action, overlapping modal, or footer collision. Automated geometry checks also confirm that the centered step group and all visible type-specific test-step tabs remain inside their containers at the supported 1120-pixel minimum width.
 
@@ -33,7 +35,7 @@ The current wizard, source page, model page, test-step basic page, detection mod
 
 ## Focused region comparison evidence
 
-The source-selection region was inspected with a main source and local video simultaneously selected. The multi-model region shows only detection, pose/temporal and segmentation; manual labels expand only after the dropdown selection. The normal-step basic region contains detection-child summaries and an add button. Selecting a normal model opens a Label list; selecting a Label opens a second dialog that combines only that Label's whole-image/multi-ROI scope, named ROI editor, fixed-camera warning and judgment fields. Save returns to the list, adds or replaces that Label only, and retains all other configured children. The pose flow keeps only Basic Information and Custom Function tabs: selecting a pose/temporal model opens the action-order popup, whose cards retain continuous `01/02/03` numbers and left/right sorting; saving returns to a Basic Information summary with a re-edit action. The custom-function page contains only type, name, file, delay and description. The Operator live view verifies a serial-number field above Start, “合格率” copy and retained Detection/ROI geometry without model label or confidence text over the image.
+The source-selection region keeps Image Folder and Video Folder mutually exclusive, while both camera choices remain disabled pending adapters. The model region shows detection, pose/temporal and segmentation and supports label add, remove and direct editing without a label-source dropdown. The normal-step basic region opens a compatible-model dialog and then a Label list; each Label uses whole image or one default ROI, and ROI drawing remains blocked until a background image is imported. Imported ROI imagery uses `Uniform` scaling, centered letterboxing and coordinate mapping only inside the actual image viewport. The pose flow keeps Basic Information and Custom Function tabs and opens the action-order popup only when required. The final page keeps Apply and Export as independent actions. The Operator live view verifies Folder filename serial mapping, Camera-only serial dialog behavior, “合格率” copy, sequence-driven logic/measurement/result rows, and the original Fan image with Detection boxes plus `Labell / Black_wire / white_wire`. Target Chinese names and confidence values are not drawn on the image.
 
 ## Comparison history
 
@@ -170,11 +172,33 @@ The source-selection region was inspected with a main source and local video sim
   - Fix: remove the camera parameter panel and present both camera cards as disabled, restrained “待开发” placeholders.
 - Pass 15 supersedes the Pass 14 camera-panel interaction. Camera enumeration, SDK integration, image/video reading and runtime behavior remain outside this frontend increment.
 
+### Pass 16 — 2026-08-27 SE meeting alignment and original-label-only overlay
+
+- [P1] The runtime image still appended confidence values to every Detection label, while the latest review requested a cleaner production view.
+  - Fix: keep the original image and Detection boxes, resolve each Model Binding back to its original English Output Label, do not substitute the Target Chinese display name, and continue using confidence internally for filtering and rule evaluation.
+- The Operator now derives Folder serial numbers from image filenames, requests a serial number only for Camera sources, and presents sequence-defined label logic, actual values and red/green Result states in a table.
+- The V2 flow now supports model deletion to empty, label add/remove/direct edit, compatible-model selection dialogs, one default ROI gated by a background image, optional default-0.5 confidence, and portable sequence plus referenced-model export/import.
+- Verified with 194 Release xUnit tests, format verification, WPF construction smoke, isolated demo publication and a live real Fan ONNX run showing 7 boxes with original English labels and no Target translations or confidence text.
+
+### Pass 17 — 2026-08-29 production-model, ToolTip, ROI and final-action repair
+
+- [P1] The sequence name still behaved like a descriptive test title instead of a production-line product model.
+  - Fix: use `FAN-A01` as the built-in product model, prefix the representative project/model display names with the same code, and refresh stale built-in sample configuration. The descriptive “风扇检测” remains a test-step name rather than a model identifier.
+- [P1] “是否必选 / 设为必选项” exposed a schema compatibility detail without a clear operator meaning.
+  - Fix: remove the selector and optional-state copy from the settings UI; every setting-side test step now participates in the product verdict, while the compatibility field remains in the underlying schema.
+- [P1] Information glyphs had ToolTip descriptions but the visible popup did not reliably appear during pointer hover.
+  - Fix: add a visible dark ToolTip style, minimum hit area, explicit hover delay/duration/placement and window-loaded propagation to all help controls. A live pointer leave/re-enter check displayed the product-model help text.
+- [P1] The imported ROI background filled its wide preview surface and distorted the source image.
+  - Fix: render with `Uniform`, center the real image viewport, reject clicks in letterbox space and map ROI coordinates against the imported image pixel dimensions. Live import of `IMG_1533.JPG` preserved its `5712 × 4284` ratio.
+- [P1] The final action implied that export was the only completion path.
+  - Fix: separate “应用到当前操作台” from “导出 Sequence 与模型”. Export prompts for a destination and keeps settings open; Apply validates and rebuilds the current Operator. The v1-to-v2 editor migration now retains the known local Folder/Camera address so direct Apply does not lose the current image source, while portable export still strips the machine-local Deployment Binding.
+- Verified with 195 Release xUnit tests, format verification, Release WPF construction smoke, packaged acceptance/startup smoke, live ROI and ToolTip inspection, and a complete R2 `设置 → 应用` run that retained a ready one-file `5712 × 4284` Folder source plus the real ONNX Runtime model.
+
 ## Open Questions
 
 - Formal Schneider brand typography and exact token values have not been provided; the current replaceable project tokens remain the accepted interim baseline.
-- The factory still needs to provide serial-number format and log schema, custom-function samples/call contract, video runtime requirements and actual camera/PLC/IO/Line hardware/protocol details.
-- This increment remains frontend-only for Local Video, named ROI/multi-Label detection children, per-Label judgment, Custom Function and serial-number traceability. Their complete persistence, runtime execution and hardware integration remain pending; the existing V2 configuration/runtime foundation is intentionally not exposed by the current wizard.
+- The factory still needs to provide the final serial-number validation/duplicate policy, custom-function samples/call contract, video runtime requirements and actual camera/PLC/IO/Line hardware/protocol details.
+- Video decoding, segmentation/pose model execution, Custom Function execution and real camera/PLC/IO/Line adapters remain pending. Supported Folder plus static ONNX Detection, production TXT/image storage and portable sequence delivery are implemented and separately acceptance-tested.
 
 ## Implementation Checklist
 
@@ -183,18 +207,18 @@ The source-selection region was inspected with a main source and local video sim
 - [x] Center the five primary steps as one group and use bounded, type-specific function tabs inside step 4.
 - [x] Present test steps as one top-to-bottom ordered list with selection, add/remove and up/down controls; do not add a second Sequence Plan.
 - [x] Keep explicit continuous ordering and sorting controls inside pose-action sequences.
-- [x] Show required/optional state and red stars for mandatory input.
+- [x] Treat every setting-side test step as participating in the total verdict; do not expose a required/optional selector, and retain red stars for mandatory inputs.
 - [x] Keep pose as a test-step type and expose its ordered actions only in a temporary popup opened from Basic Information.
 - [x] Support multiple independently configured model cards and reuse the collection in detection-item binding.
-- [x] Remove Image Classification from the current model UI and collapse manual labels behind a source dropdown.
+- [x] Remove Image Classification from the current model UI and maintain labels through add, remove and direct editing without a source dropdown.
 - [x] Keep Image Folder and Video Folder mutually exclusive with independent remembered paths; retain USB and industrial cameras as disabled pending-development cards.
 - [x] Provide ToolTips for concepts and destructive/ordering controls.
 - [x] Support real pointer-drag ROI selection with live reference-coordinate backfill.
-- [x] Open one detail popup per selected Label, with independent whole-image/multi-ROI scope and judgment; add or replace only that Label on save.
-- [x] Mark ROI as fixed-camera-only and support multiple named regions in the modal.
+- [x] Open one detail popup per selected Label, with independent whole-image/single-ROI scope and judgment; add or replace only that Label on save.
+- [x] Keep one default ROI per Label and block drawing/saving until a background image is imported.
 - [x] Keep Custom Function name, file and delay independent for each selected test step without executing Python.
-- [x] Add the Operator serial-number placeholder while retaining explicit Start; rename the statistics choice to qualification rate.
-- [x] Retain Detection/ROI geometry while removing model label and confidence text from the runtime image.
+- [x] Derive Folder serial numbers from image filenames, request serial numbers only for Camera sources, retain explicit Start and use qualification-rate naming.
+- [x] Retain the original image and Detection/ROI geometry, draw original English Output Labels, and omit Target Chinese names and confidence text from the runtime image.
 - [x] Keep the new frontend-only fields visibly separated from persistence, execution and hardware claims.
 - [x] Build and capture the WPF implementation without XAML construction errors.
 

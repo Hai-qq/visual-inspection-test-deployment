@@ -28,6 +28,18 @@
         <Setter Property="Background" Value="{StaticResource CanvasBrush}" />
     </Style>
 
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="#26322D" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="#51615A" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="MaxWidth" Value="420" />
+        <Setter Property="Placement" Value="MousePoint" />
+        <Setter Property="HasDropShadow" Value="True" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
     <Style TargetType="Button">
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="Padding" Value="16,7" />

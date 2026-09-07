@@ -1,8 +1,12 @@
+using System.IO;
 using System.Windows;
+using VisualInspection.App.Demo;
 using VisualInspection.App.Services;
 using VisualInspection.App.ViewModels;
 using VisualInspection.Core.Security;
+using VisualInspection.Core.V2.Configuration;
 using VisualInspection.Infrastructure.Persistence;
+using VisualInspection.Infrastructure.V2.Persistence;
 
 namespace VisualInspection.App;
 
@@ -12,9 +16,69 @@ public partial class App : Application
     {
         ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
         base.OnStartup(e);
+        var sampleExportArgumentIndex = Array.FindIndex(
+            e.Args,
+            argument => argument.Equals("--export-sample-sequence", StringComparison.OrdinalIgnoreCase));
+        var sequenceVerifyArgumentIndex = Array.FindIndex(
+            e.Args,
+            argument => argument.Equals("--verify-portable-sequence", StringComparison.OrdinalIgnoreCase));
 
         try
         {
+            if (sampleExportArgumentIndex >= 0)
+            {
+                if (sampleExportArgumentIndex + 1 >= e.Args.Length)
+                {
+                    throw new ArgumentException("--export-sample-sequence 后必须提供 .sequence.json 输出路径。");
+                }
+
+                string modelPath;
+                string imageDirectory;
+                if (sampleExportArgumentIndex + 3 < e.Args.Length)
+                {
+                    modelPath = Path.GetFullPath(e.Args[sampleExportArgumentIndex + 2]);
+                    var imagePath = Path.GetFullPath(e.Args[sampleExportArgumentIndex + 3]);
+                    if (!File.Exists(modelPath) || !File.Exists(imagePath))
+                    {
+                        throw new FileNotFoundException("代表性 Fan 模型或图片不存在。");
+                    }
+
+                    imageDirectory = Path.GetDirectoryName(imagePath)!;
+                }
+                else
+                {
+                    var assets = await FrontendDemoAssetSeeder.EnsureAsync()
+                        ?? throw new InvalidOperationException(
+                            "当前构建未包含代表性 Fan 资源；请同时提供模型与图片路径。");
+                    modelPath = assets.ModelPath;
+                    imageDirectory = assets.ImageDirectory;
+                }
+
+                var project = SampleProjectFactory.Create(imageDirectory, modelPath);
+                var portable = ProjectConfigurationV1Migrator.Migrate(project);
+                await PortableSequenceFile.ExportAsync(portable, e.Args[sampleExportArgumentIndex + 1], AppContext.BaseDirectory);
+                Shutdown(0);
+                return;
+            }
+
+            if (sequenceVerifyArgumentIndex >= 0)
+            {
+                if (sequenceVerifyArgumentIndex + 1 >= e.Args.Length)
+                {
+                    throw new ArgumentException("--verify-portable-sequence 后必须提供 .sequence.json 路径。");
+                }
+
+                var verified = await ApplicationBootstrapper.LoadPortableSequenceAsync(
+                    e.Args[sequenceVerifyArgumentIndex + 1]);
+                if (verified.Project.TestSequences.Count != 1 || verified.Project.Models.Count == 0)
+                {
+                    throw new InvalidDataException("sequence 未形成一个可执行型号及对应模型。");
+                }
+
+                Shutdown(0);
+                return;
+            }
+
             var captureInspectionItems = e.Args.Contains(
                 "--v2-wizard-items-snapshot",
                 StringComparer.OrdinalIgnoreCase);
@@ -105,14 +169,9 @@ public partial class App : Application
             var previewTrigger = e.Args.Contains(
                 "--v2-wizard-trigger-preview",
                 StringComparer.OrdinalIgnoreCase);
-            var frontendDemoDefault = e.Args.Length == 0 && string.Equals(
-                typeof(App).Assembly.GetName().Name,
-                "VisualInspection.FrontendDemo",
-                StringComparison.Ordinal);
             if (previewInputSource || previewModels || previewRoi || previewRule || previewTrigger ||
                 e.Args.Contains("--v2-wizard-preview", StringComparer.OrdinalIgnoreCase) ||
-                e.Args.Contains("--frontend-demo", StringComparer.OrdinalIgnoreCase) ||
-                frontendDemoDefault)
+                e.Args.Contains("--frontend-demo", StringComparer.OrdinalIgnoreCase))
             {
                 var preview = new TestSequenceWizardV2Window();
                 MainWindow = preview;
@@ -175,7 +234,6 @@ public partial class App : Application
                 return;
             }
 
-            var result = await ApplicationBootstrapper.LoadOrCreateProjectAsync();
             IUserAccountStore userStore = new JsonUserAccountStore(DemoUserSeeder.UserAccountFilePath);
             await DemoUserSeeder.EnsureAsync(userStore);
             var login = new LoginWindow(new AuthenticationService(userStore));
@@ -185,6 +243,7 @@ public partial class App : Application
                 return;
             }
 
+            var result = await ApplicationBootstrapper.LoadOrCreateProjectAsync();
             var window = new MainWindow(new MainWindowViewModel(result, login.Session), result, login.Session);
             MainWindow = window;
             window.Show();
@@ -192,6 +251,13 @@ public partial class App : Application
         }
         catch (Exception exception)
         {
+            if (sampleExportArgumentIndex >= 0 || sequenceVerifyArgumentIndex >= 0)
+            {
+                Console.Error.WriteLine(exception);
+                Shutdown(1);
+                return;
+            }
+
             MessageBox.Show(
                 $"应用程序无法加载项目配置。{Environment.NewLine}{Environment.NewLine}{exception.Message}",
                 "视觉检测测试部署系统",
