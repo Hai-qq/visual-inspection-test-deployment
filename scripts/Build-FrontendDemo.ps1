@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$OutputDirectory,
+    [string]$FanModelPath,
+    [string]$FanImagePath,
     [switch]$Force
 )
 
@@ -10,6 +12,94 @@ $solution = Join-Path $workspace 'VisualInspection.sln'
 $appProject = Join-Path $workspace 'src\VisualInspection.App\VisualInspection.App.csproj'
 $artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $workspace 'artifacts'))
 $releaseDate = Get-Date -Format 'yyyyMMdd'
+
+function Resolve-RequiredAsset {
+    param(
+        [string]$ConfiguredPath,
+        [string[]]$Candidates,
+        [string]$DisplayName
+    )
+
+    $paths = @()
+    if (-not [string]::IsNullOrWhiteSpace($ConfiguredPath)) {
+        $paths += $ConfiguredPath
+    }
+    $paths += $Candidates
+    foreach ($path in $paths) {
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+            return [System.IO.Path]::GetFullPath($path)
+        }
+    }
+
+    throw "$DisplayName was not found. Pass its exact path to the packaging script."
+}
+
+function Assert-LoginStartup {
+    param([string]$ExecutablePath)
+
+    $loginTitlePrefix = [string]::Concat([char]0x767B, [char]0x5F55)
+    $process = Start-Process -FilePath $ExecutablePath -PassThru
+    try {
+        $deadline = [DateTime]::UtcNow.AddSeconds(20)
+        do {
+            Start-Sleep -Milliseconds 250
+            $process.Refresh()
+            if ($process.HasExited) {
+                throw "Default startup exited before showing login (exit code $($process.ExitCode))."
+            }
+            if ($process.MainWindowTitle.StartsWith($loginTitlePrefix, [StringComparison]::Ordinal)) {
+                return
+            }
+        } while ([DateTime]::UtcNow -lt $deadline)
+
+        throw "Default startup did not show the login window. Current title: $($process.MainWindowTitle)"
+    }
+    finally {
+        $process.Refresh()
+        if (-not $process.HasExited) {
+            if (-not $process.CloseMainWindow()) {
+                Stop-Process -Id $process.Id
+            }
+            elseif (-not $process.WaitForExit(5000)) {
+                Stop-Process -Id $process.Id
+            }
+        }
+    }
+}
+
+$desktopRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::Desktop)
+$modelSearchRoot = Join-Path $desktopRoot 'code'
+$modelCandidate = if (Test-Path -LiteralPath $modelSearchRoot -PathType Container) {
+    Get-ChildItem -LiteralPath $modelSearchRoot -Recurse -File -Filter 'fan.onnx' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+}
+$imageCandidate = if (Test-Path -LiteralPath $modelSearchRoot -PathType Container) {
+    Get-ChildItem -LiteralPath $modelSearchRoot -Recurse -File -Filter 'IMG_1533.JPG' -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+}
+$FanModelPath = Resolve-RequiredAsset `
+    -ConfiguredPath $FanModelPath `
+    -Candidates @(
+        $modelCandidate
+    ) `
+    -DisplayName 'Fan ONNX model'
+$FanImagePath = Resolve-RequiredAsset `
+    -ConfiguredPath $FanImagePath `
+    -Candidates @(
+        $imageCandidate,
+        (Join-Path $workspace '..\Fan\OK\IMG_1533.JPG')
+    ) `
+    -DisplayName 'Fan demonstration image'
+$fanModelHash = (Get-FileHash -LiteralPath $FanModelPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$fanImageHash = (Get-FileHash -LiteralPath $FanImagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+$expectedFanModelHash = '6e30134336323f21a2125bc36b590126b9ac3d2b34ea06ef041f6bdedcb078d7'
+$expectedFanImageHash = '1aae7ead89bf4f0b956e48ec35924dfa2bed08208950a4108481cfb46a4487dd'
+if ($fanModelHash -ne $expectedFanModelHash) {
+    throw "Fan ONNX model SHA-256 mismatch: $fanModelHash"
+}
+if ($fanImageHash -ne $expectedFanImageHash) {
+    throw "Fan demonstration image SHA-256 mismatch: $fanImageHash"
+}
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $artifactsRoot "frontend-demo-v0.2-$releaseDate-win-x64"
@@ -79,7 +169,9 @@ try {
         -p:EnableCompressionInSingleFile=true `
         -p:PublishTrimmed=false `
         -p:DebugType=None `
-        -p:DebugSymbols=false
+        -p:DebugSymbols=false `
+        "-p:FrontendDemoFanModelPath=$FanModelPath" `
+        "-p:FrontendDemoFanImagePath=$FanImagePath"
     if ($LASTEXITCODE -ne 0) { throw 'Frontend demo publish failed.' }
     if (-not (Test-Path -LiteralPath $stagingExecutable -PathType Leaf)) {
         throw "Published executable is missing: $stagingExecutable"
@@ -90,6 +182,11 @@ try {
         throw "Staging UI construction smoke failed with exit code $($stagingSmoke.ExitCode)."
     }
 
+    $stagingAcceptance = Start-Process -FilePath $stagingExecutable -ArgumentList '--acceptance-smoke' -Wait -PassThru -WindowStyle Hidden
+    if ($stagingAcceptance.ExitCode -ne 0) {
+        throw "Staging Fan acceptance smoke failed with exit code $($stagingAcceptance.ExitCode)."
+    }
+
     New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
     Copy-Item -LiteralPath $stagingExecutable -Destination $executablePath -Force
 
@@ -97,6 +194,23 @@ try {
     if ($finalSmoke.ExitCode -ne 0) {
         throw "Final single-file UI construction smoke failed with exit code $($finalSmoke.ExitCode)."
     }
+
+    $finalAcceptance = Start-Process -FilePath $executablePath -ArgumentList '--acceptance-smoke' -Wait -PassThru -WindowStyle Hidden
+    if ($finalAcceptance.ExitCode -ne 0) {
+        throw "Final Fan acceptance smoke failed with exit code $($finalAcceptance.ExitCode)."
+    }
+    $acceptanceReceiptPath = Join-Path $env:LOCALAPPDATA 'VisualInspectionTestDeployment\acceptance-smoke-result.json'
+    $acceptanceReceipt = Get-Content -LiteralPath $acceptanceReceiptPath -Raw | ConvertFrom-Json
+    $fanItemReceipts = @($acceptanceReceipt.itemResults)
+    if ($acceptanceReceipt.verdict -ne 'pass' -or
+        [System.IO.Path]::GetFileName($acceptanceReceipt.frameOrigin) -ne 'IMG_1533.JPG' -or
+        -not $acceptanceReceipt.provider.StartsWith('ONNX Runtime CPU', [StringComparison]::Ordinal) -or
+        $fanItemReceipts.Count -ne 1 -or
+        @($fanItemReceipts[0].measured -split ';').Count -ne 6) {
+        throw 'Final Fan acceptance receipt did not confirm one six-rule test step on IMG_1533.JPG with the real ONNX Runtime CPU provider.'
+    }
+
+    Assert-LoginStartup -ExecutablePath $executablePath
 
     $hash = (Get-FileHash -LiteralPath $executablePath -Algorithm SHA256).Hash.ToLowerInvariant()
     $baseCommit = (git -C $workspace rev-parse HEAD).Trim()
@@ -108,14 +222,23 @@ Artifact=$executableName
 BuiltAt=$builtAt
 Platform=win-x64
 Deployment=self-contained-single-file
-DefaultEntry=V2 frontend demo
+DefaultEntry=Login
+DemoFlow=Login -> Operator -> V2 design -> Operator
+FanImage=IMG_1533.JPG
+FanRuntime=real ONNX Runtime CPU
+FanTestSteps=1
+FanRulesInStep=6
+FanModelSHA256=$fanModelHash
+FanImageSHA256=$fanImageHash
 AssemblyVersion=0.6.0
-FrontendBaseline=approved frontend v0.2 plus Pass 13-15
+FrontendBaseline=approved frontend v0.2 through Pass 17
 BaseCommit=$baseCommit
 SourceState=$sourceState
 Tests=pass
 Format=pass
 UIConstructionSmoke=pass
+FanAcceptanceSmoke=pass
+StartupLoginSmoke=pass
 SHA256=$hash
 "@
     $stagingReceipt = Join-Path $stagingPath 'build-receipt.txt'

@@ -1,8 +1,10 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using VisualInspection.App.Demo;
 using VisualInspection.App.ViewModels;
+using VisualInspection.Core.Rules;
 using VisualInspection.Core.Security;
 using VisualInspection.Infrastructure.Persistence;
 
@@ -37,7 +39,28 @@ public static class UiConstructionSmokeRunner
                 SampleProjectFactory.Create(bootstrap.DemoDataDirectory),
                 bootstrap.Store,
                 bootstrap.PreviewFrame);
-            var wizardV2Window = new TestSequenceWizardV2Window();
+            var wizardV2Window = new TestSequenceWizardV2Window
+            {
+                SuppressModelSelectionDialogForSmoke = true,
+                SuppressSequenceExportForSmoke = true,
+                SuppressApplyToOperatorForSmoke = true
+            };
+            var defaultFanDesignStep = wizardV2Window.InspectionItems.SingleOrDefault();
+            if (defaultFanDesignStep?.Name != "风扇检测" ||
+                defaultFanDesignStep.RuleLogicalOperatorIndex != 0 ||
+                defaultFanDesignStep.DetectionChildren.Count != 6 ||
+                defaultFanDesignStep.AdditionalRules.Count != 5 ||
+                !defaultFanDesignStep.DetectionChildren.Select(child => child.Label).SequenceEqual(
+                    ["Labell", "Black_wire", "white_wire", "reverse_Labell", "reverse_Black_wire", "reverse_white_wire"]) ||
+                !defaultFanDesignStep.AdditionalRules.Select(rule => rule.ThresholdText).SequenceEqual(
+                    ["3", "1", "0", "0", "0"]) ||
+                !defaultFanDesignStep.AdditionalRules.Select(rule => rule.RuleMethodIndex).SequenceEqual(
+                    [0, 0, 2, 2, 2]) ||
+                !defaultFanDesignStep.AdditionalRules.Select(rule => rule.OutcomeIndex).SequenceEqual(
+                    [0, 0, 1, 1, 1]))
+            {
+                throw new InvalidOperationException("V2 默认设计未保持一个风扇检测测试步包含六条 AND 标签规则。");
+            }
             loginWindow.Show();
             loginWindow.UpdateLayout();
             loginWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -51,7 +74,6 @@ public static class UiConstructionSmokeRunner
                 mainWindow.StartActionButton.FontSize < 14 ||
                 mainWindow.StartActionButton.ActualHeight < 48 ||
                 mainWindow.CurrentItemDetailsScrollViewer.ActualHeight < 130 ||
-                mainWindow.SerialNumberInputTextBox.ActualHeight < 30 ||
                 mainWindow.QualificationRateModeRadioButton.Content?.ToString() != "合格率" ||
                 mainWindow.QualificationRateTitleText.Text != "合格率")
             {
@@ -59,44 +81,144 @@ public static class UiConstructionSmokeRunner
             }
 
             var mainWindowViewModel = (MainWindowViewModel)mainWindow.DataContext;
+            if (mainWindowViewModel.ProjectName != SampleProjectFactory.SampleProjectName ||
+                !mainWindowViewModel.SequenceName.Contains(SampleProjectFactory.SampleProductModel, StringComparison.Ordinal) ||
+                mainWindowViewModel.CurrentImage is null ||
+                !mainWindowViewModel.Sequence.Select(item => item.Name).SequenceEqual(
+                    ["风扇检测"]))
+            {
+                throw new InvalidOperationException("操作员工作台未预加载可检测的 Fan 示例项目、首帧或测试序列。");
+            }
+
             var adminHeaderButtons = mainWindow.HeaderAdminActionsPanel.Children
                 .OfType<System.Windows.Controls.Button>()
                 .ToArray();
-            if (adminHeaderButtons.Length != 1 ||
-                !ReferenceEquals(adminHeaderButtons[0], mainWindow.SequenceSettingsButton) ||
-                mainWindow.SequenceSettingsButton.Content?.ToString() != "测试序列设置 V2")
+            if (adminHeaderButtons.Length != 2 ||
+                !adminHeaderButtons.Contains(mainWindow.ImportSequenceButton) ||
+                !adminHeaderButtons.Contains(mainWindow.SequenceSettingsButton) ||
+                mainWindow.ImportSequenceButton.Content?.ToString() != "导入测试序列" ||
+                mainWindow.SequenceSettingsButton.Content?.ToString() != "测试序列设置")
             {
-                throw new InvalidOperationException("操作员工作台应只保留测试序列设置入口，不应显示独立图源设置。");
+                throw new InvalidOperationException("操作员工作台未同时提供 sequence 导入与管理员设置入口。");
             }
 
-            if (mainWindowViewModel.StartCommand.CanExecute(null))
+            if (!mainWindowViewModel.StartCommand.CanExecute(null) || mainWindowViewModel.RequiresSerialNumber)
             {
-                throw new InvalidOperationException("未录入序列号时，操作员不应能够开始检测。");
+                throw new InvalidOperationException("文件夹图源应可直接开始，并由图片文件名生成序列号。");
             }
 
-            mainWindowViewModel.SerialNumberInput = "SN-SMOKE-001";
+            var pendingDetectionRows = mainWindowViewModel.DetectionSummary.ToArray();
+            if (mainWindow.DetectionLogicHeaderText.Text != "判定逻辑" ||
+                mainWindow.DetectionMeasuredHeaderText.Text != "本次实测" ||
+                mainWindow.DetectionResultHeaderText.Text != "Result" ||
+                mainWindowViewModel.CurrentRuleCombinationText != "组合逻辑：全部满足（AND）" ||
+                pendingDetectionRows.Length != 6 ||
+                pendingDetectionRows[0].LogicText != "数量 = 3 → 通过" ||
+                pendingDetectionRows[^1].LogicText != "数量 > 0 → 不通过" ||
+                pendingDetectionRows.Any(row => row.MeasuredText != "待检测" || row.Result != "—"))
+            {
+                throw new InvalidOperationException("操作台没有按当前 sequence 预加载标签判定逻辑。");
+            }
+
+            var fanRule = bootstrap.Project.TestSequences
+                .OrderByDescending(sequence => sequence.IsPublished)
+                .First()
+                .Items.Single()
+                .Rules[0];
+            var fanCountRule = new CountRule(
+                "fan",
+                fanRule.Metric,
+                fanRule.Operator,
+                fanRule.Threshold,
+                fanRule.UpperThreshold,
+                fanRule.ExpectedCount,
+                fanRule.OutcomeWhenMatched);
+            mainWindowViewModel.DetectionSummary.Clear();
+            mainWindowViewModel.DetectionSummary.Add(new DetectionSummaryRowViewModel(
+                "fan",
+                fanRule,
+                3,
+                CountRuleEvaluator.Evaluate(fanCountRule, 3)));
+            mainWindowViewModel.DetectionSummary.Add(new DetectionSummaryRowViewModel(
+                "fan",
+                fanRule,
+                2,
+                CountRuleEvaluator.Evaluate(fanCountRule, 2)));
             mainWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
-            if (!mainWindowViewModel.SerialNumberStatusText.Contains("只检测一个产品 / 一张图片", StringComparison.Ordinal) ||
-                !mainWindowViewModel.StartCommand.CanExecute(null))
+            var detectionRows = mainWindowViewModel.DetectionSummary.ToArray();
+            if (mainWindow.DetectionSummaryItemsControl.Items.Count != 2 ||
+                detectionRows[0].MeasuredText != "3 个" ||
+                detectionRows[1].MeasuredText != "2 个" ||
+                detectionRows[0].Result != "PASS" ||
+                detectionRows[1].Result != "FAIL" ||
+                Equals(detectionRows[0].ResultBrush, detectionRows[1].ResultBrush))
             {
-                throw new InvalidOperationException("操作员序列号门禁或单件检测提示未生效。");
+                throw new InvalidOperationException("操作台判定逻辑、本次实测和红绿 Result 表格冒烟失败。");
             }
 
-            if (Math.Abs(MainWindowViewModel.DetectionBorderThickness - 4) > 0.01 ||
+            mainWindowViewModel.DetectionSummary.Clear();
+
+            var serialNumberDialog = new SerialNumberDialog();
+            serialNumberDialog.Show();
+            serialNumberDialog.UpdateLayout();
+            if (serialNumberDialog.Title != "录入产品序列号" ||
+                serialNumberDialog.SerialDialogTitleText.ToolTip is null ||
+                serialNumberDialog.SerialNumberTextBox.ActualWidth <= 0)
+            {
+                throw new InvalidOperationException("Camera 序列号弹窗构造或说明收纳冒烟失败。");
+            }
+
+            serialNumberDialog.Close();
+
+            var modelSelectionDialog = new ModelSelectionDialog(
+                wizardV2Window.Models.Where(model => model.TypeIndex == 0),
+                wizardV2Window.Models.First(model => model.TypeIndex == 0));
+            modelSelectionDialog.Show();
+            modelSelectionDialog.UpdateLayout();
+            if (modelSelectionDialog.Title != "选择模型" ||
+                modelSelectionDialog.ModelsList.Items.Count == 0 ||
+                modelSelectionDialog.SelectedModel?.TypeIndex != 0)
+            {
+                throw new InvalidOperationException("兼容模型选择弹窗构造冒烟失败。");
+            }
+
+            modelSelectionDialog.Close();
+
+            if (MainWindowViewModel.ResolveDetectionOverlayLabel(
+                    bootstrap.Project,
+                    fanRule.ModelBindingId) != "Labell" ||
+                Math.Abs(MainWindowViewModel.DetectionBorderThickness - 4) > 0.01 ||
                 Math.Abs(MainWindowViewModel.GetOverlayScale(1920, 1080) - 3) > 0.01)
             {
-                throw new InvalidOperationException("操作员检测框尺寸及分辨率自适应参数冒烟失败。");
+                throw new InvalidOperationException("操作员检测图未使用模型原始英文 Label、检测框尺寸或分辨率自适应参数冒烟失败。");
             }
 
             var integratedWizard = new TestSequenceWizardV2Window(returnToOperatorOnCompletion: true);
             if (integratedWizard.ClosePreviewButton.Content?.ToString() != "返回操作台" ||
-                integratedWizard.PreviewModeText.Text != "前端界面确认稿" ||
-                integratedWizard.WizardNavigationPanel.Children.Count != 2)
+                integratedWizard.PreviewModeText.Text != "sequence 设置、应用与导出" ||
+                integratedWizard.WizardNavigationPanel.Children.Count != 3)
             {
                 throw new InvalidOperationException("V2 与操作员工作台的前端确认入口或精简导航冒烟失败。");
             }
 
             integratedWizard.Close();
+            var operatorDesignRoundTripObserved = false;
+            _ = mainWindow.Dispatcher.BeginInvoke(() =>
+            {
+                var launchedWizard = Application.Current.Windows
+                    .OfType<TestSequenceWizardV2Window>()
+                    .FirstOrDefault(window => ReferenceEquals(window.Owner, mainWindow));
+                operatorDesignRoundTripObserved = launchedWizard is not null &&
+                    launchedWizard.ClosePreviewButton.Content?.ToString() == "返回操作台";
+                launchedWizard?.Close();
+            }, DispatcherPriority.ApplicationIdle);
+            mainWindow.SequenceSettingsButton.RaiseEvent(
+                new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (!operatorDesignRoundTripObserved || !mainWindow.IsVisible)
+            {
+                throw new InvalidOperationException("操作台进入 V2 设计界面并返回操作台的实际导航冒烟失败。");
+            }
+
             settingsWindow.Show();
             settingsWindow.UpdateLayout();
             settingsWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -121,6 +243,21 @@ public static class UiConstructionSmokeRunner
             wizardV2Window.Show();
             wizardV2Window.UpdateLayout();
             wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            wizardV2Window.ShowSourceStepForPreview();
+            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            if (wizardV2Window.FolderSourceSettingsInfoGlyph.ActualWidth < 20 ||
+                ToolTipService.GetInitialShowDelay(wizardV2Window.FolderSourceSettingsInfoGlyph) > 200 ||
+                ToolTipService.GetShowDuration(wizardV2Window.FooterHintText) < 15000 ||
+                ToolTipService.GetPlacement(wizardV2Window.FooterHintText) !=
+                System.Windows.Controls.Primitives.PlacementMode.MousePoint)
+            {
+                throw new InvalidOperationException(
+                    $"V2 说明 ToolTip 的悬停命中区域、显示延迟或可见时长冒烟失败：" +
+                    $"hit={wizardV2Window.FolderSourceSettingsInfoGlyph.ActualWidth:0.##}, " +
+                    $"delay={ToolTipService.GetInitialShowDelay(wizardV2Window.FolderSourceSettingsInfoGlyph)}, " +
+                    $"duration={ToolTipService.GetShowDuration(wizardV2Window.FooterHintText)}, " +
+                    $"placement={ToolTipService.GetPlacement(wizardV2Window.FooterHintText)}。");
+            }
             var defaultWizardWidth = wizardV2Window.Width;
             wizardV2Window.Width = wizardV2Window.MinWidth;
             wizardV2Window.UpdateLayout();
@@ -281,11 +418,13 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("V2 当前模型类型切换冒烟失败。");
             }
 
-            wizardV2Window.LabelSourceComboBox.SelectedIndex = 1;
-            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
-            if (wizardV2Window.ManualLabelEditorPanel.Visibility != Visibility.Visible)
+            wizardV2Window.NewModelLabelTextBox.Text = "manual_label";
+            wizardV2Window.AddModelLabelButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (!wizardV2Window.SelectedModel.Labels.Contains("manual_label") ||
+                !wizardV2Window.SelectedModel.TryRenameLabel("manual_label", "renamed_label", out _) ||
+                !wizardV2Window.SelectedModel.TryRemoveLabel("renamed_label"))
             {
-                throw new InvalidOperationException("V2 手动标签下拉选项没有展开精简编辑器。");
+                throw new InvalidOperationException("V2 标签加号、直接改名和减号编辑冒烟失败。");
             }
 
             wizardV2Window.RemoveSelectedModelButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -299,6 +438,31 @@ public static class UiConstructionSmokeRunner
             {
                 throw new InvalidOperationException("V2 模型库添加/删除操作 ToolTip 冒烟失败。");
             }
+
+            var deleteAllWizard = new TestSequenceWizardV2Window
+            {
+                SuppressModelSelectionDialogForSmoke = true,
+                SuppressSequenceExportForSmoke = true
+            };
+            while (deleteAllWizard.Models.Count > 0)
+            {
+                var countBeforeDelete = deleteAllWizard.Models.Count;
+                deleteAllWizard.ModelItemsList.SelectedItem = deleteAllWizard.Models[0];
+                deleteAllWizard.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+                deleteAllWizard.RemoveSelectedModelButton.RaiseEvent(
+                    new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                if (deleteAllWizard.Models.Count != countBeforeDelete - 1)
+                {
+                    throw new InvalidOperationException("V2 模型库未能逐个删除模型。");
+                }
+            }
+
+            if (deleteAllWizard.InspectionItems.Count != 0 || deleteAllWizard.SelectedModel is not null)
+            {
+                throw new InvalidOperationException("V2 模型库删空后仍保留悬空测试步或模型选择。");
+            }
+
+            deleteAllWizard.Close();
 
             wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             wizardV2Window.UpdateLayout();
@@ -347,21 +511,16 @@ public static class UiConstructionSmokeRunner
                 new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
 
             var expectedTargetModelCount = wizardV2Window.Models.Count(model => model.TypeIndex == 0);
-            if (wizardV2Window.InspectionModelComboBox.Items.Count != expectedTargetModelCount ||
-                wizardV2Window.InspectionModelComboBox.Items.Cast<TestSequenceWizardV2Window.ModelPreview>()
-                    .Any(model => model.TypeIndex != 0))
+            if (wizardV2Window.CompatibleInspectionModels.Count != expectedTargetModelCount ||
+                wizardV2Window.CompatibleInspectionModels.Any(model => model.TypeIndex != 0) ||
+                wizardV2Window.ChooseInspectionModelButton.ToolTip is null)
             {
-                throw new InvalidOperationException("V2 测试步模型下拉框没有按检测类型过滤项目模型库。");
+                throw new InvalidOperationException("V2 模型选择弹窗入口没有按检测类型过滤项目模型库。");
             }
 
-            var modelBeforeCanceledDropDown = wizardV2Window.SelectedInspectionItem?.Model;
-            wizardV2Window.InspectionModelComboBox.IsDropDownOpen = true;
-            wizardV2Window.InspectionModelComboBox.IsDropDownOpen = false;
-            wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
-            if (wizardV2Window.DetectionEditorOverlay.Visibility != Visibility.Collapsed ||
-                !ReferenceEquals(wizardV2Window.InspectionModelComboBox.SelectedItem, modelBeforeCanceledDropDown))
+            if (wizardV2Window.DetectionEditorOverlay.Visibility != Visibility.Collapsed)
             {
-                throw new InvalidOperationException("V2 未更改模型时关闭下拉框不应打开 Label 弹窗或清空当前显示。");
+                throw new InvalidOperationException("V2 未选择新模型时不应打开检测标签弹窗。");
             }
 
             var originalInspectionItemCount = wizardV2Window.InspectionItemsList.Items.Count;
@@ -396,7 +555,7 @@ public static class UiConstructionSmokeRunner
                     .SequenceEqual(reboundModel.Labels) ||
                 wizardV2Window.FindName("DetectionEditorModelComboBox") is not null)
             {
-                throw new InvalidOperationException("V2 测试步改绑模型后没有清理旧检测子项并按新模型刷新 Label。");
+                throw new InvalidOperationException("V2 测试步改绑模型后没有清理旧检测标签并按新模型刷新标签。");
             }
 
             if (wizardV2Window.InspectionTypeComboBox.Items.Count != 3 ||
@@ -462,7 +621,7 @@ public static class UiConstructionSmokeRunner
                 if (!displayedLabels.SequenceEqual(detectionStep.DetectionChildren.Select(child => child.Label)) ||
                     detectionStep.DetectionChildren.Any(child => !detectionStep.Model.Labels.Contains(child.Label)))
                 {
-                    throw new InvalidOperationException("V2 切换测试步后检测子项没有跟随当前测试步及其绑定模型。");
+                    throw new InvalidOperationException("V2 切换测试步后检测标签没有跟随当前测试步及其绑定模型。");
                 }
             }
 
@@ -485,8 +644,7 @@ public static class UiConstructionSmokeRunner
             if (wizardV2Window.PoseBasicInfoHint.Visibility != Visibility.Visible ||
                 wizardV2Window.Step5Panel.Visibility != Visibility.Visible ||
                 wizardV2Window.SelectedInspectionItem?.Model.TypeIndex != 1 ||
-                wizardV2Window.InspectionModelComboBox.Items.Cast<TestSequenceWizardV2Window.ModelPreview>()
-                    .Any(model => model.TypeIndex != 1) ||
+                wizardV2Window.CompatibleInspectionModels.Any(model => model.TypeIndex != 1) ||
                 wizardV2Window.TestBlockModuleTabs.Children.Count != 2)
             {
                 throw new InvalidOperationException("V2 姿态类型没有自动换绑姿态模型、过滤下拉框或弹出动作顺序。");
@@ -494,14 +652,16 @@ public static class UiConstructionSmokeRunner
 
             wizardV2Window.CancelPoseActionEditorButton.RaiseEvent(
                 new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-
-            wizardV2Window.RemoveSelectedInspectionItemButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            if (wizardV2Window.InspectionItemsList.Items.Count != originalInspectionItemCount ||
-                !wizardV2Window.InspectionItems.Select(item => item.FunctionCode).SequenceEqual(originalFunctionCodes) ||
-                !wizardV2Window.InspectionItemsSemanticsText.Text.Contains("从上到下", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("V2 测试步顺序列表的加减交互冒烟失败。");
-            }
+            addedStep.PoseSteps.Add(new TestSequenceWizardV2Window.PoseStepPreview(
+                2,
+                "放置",
+                true,
+                addedStep.Model));
+            addedStep.PoseSteps.Add(new TestSequenceWizardV2Window.PoseStepPreview(
+                3,
+                "按压到位",
+                true,
+                addedStep.Model));
 
             if (wizardV2Window.AddInspectionItemButton.ToolTip is null ||
                 wizardV2Window.RemoveSelectedInspectionItemButton.ToolTip is null)
@@ -560,7 +720,9 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("V2 姿态动作重新编辑与取消恢复冒烟失败。");
             }
 
-            var targetDetectionItem = wizardV2Window.InspectionItems.First(item => item.TypeIndex == 0);
+            wizardV2Window.AddInspectionItemButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            var targetDetectionItem = wizardV2Window.SelectedInspectionItem
+                ?? throw new InvalidOperationException("V2 新增临时检测测试步后选择状态丢失。");
             wizardV2Window.InspectionItemsList.SelectedItem = targetDetectionItem;
             wizardV2Window.SelectInspectionModelForSmoke(targetDetectionItem.Model);
             wizardV2Window.UpdateLayout();
@@ -588,33 +750,47 @@ public static class UiConstructionSmokeRunner
             }
 
             wizardV2Window.RefreshDetectionLabelScopeForSmoke();
+            wizardV2Window.DetectionEditor.ConfidenceText = string.Empty;
+            wizardV2Window.ApplyDetectionLabelEditorButton.RaiseEvent(
+                new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (configuredDetectionItem.NamedRois.Count != 1 ||
+                configuredDetectionItem.RoiBackgroundImage is not null ||
+                wizardV2Window.DetectionLabelEditorOverlay.Visibility != Visibility.Visible ||
+                !wizardV2Window.DetectionLabelEditorStatusText.Text.Contains("先导入", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("V2 单 ROI 在未导入标注底图时没有阻止保存。");
+            }
+
+            wizardV2Window.SetRoiBackgroundForSmoke();
             wizardV2Window.UpdateLayout();
             wizardV2Window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
             if (wizardV2Window.DetectionLabelEditorOverlay.Visibility != Visibility.Visible ||
                 wizardV2Window.DetectionEditor.ActiveLabel != additionalLabel ||
-                !wizardV2Window.DetectionLabelScopeSummaryText.Text.Contains("ROI-01", StringComparison.Ordinal) ||
-                !wizardV2Window.DetectionLabelScopeSummaryText.Text.Contains("ROI-02", StringComparison.Ordinal) ||
+                !wizardV2Window.DetectionLabelScopeSummaryText.Text.Contains("ROI", StringComparison.Ordinal) ||
                 wizardV2Window.RoiPreviewSurface.ActualWidth <= 0 ||
                 wizardV2Window.RoiPreviewSurface.ActualHeight <= 0)
             {
-                throw new InvalidOperationException("V2 单 Label 弹窗或多 ROI 实时区域摘要冒烟失败。");
+                throw new InvalidOperationException("V2 单检测标签弹窗、标注底图与默认 ROI 实时摘要冒烟失败。");
             }
 
             var originalRoi = wizardV2Window.RoiLogicalRect;
+            var roiViewport = wizardV2Window.RoiImageViewport;
             wizardV2Window.ApplyRoiSelectionForSmoke(
                 new System.Windows.Point(
-                    wizardV2Window.RoiPreviewSurface.ActualWidth * 0.15,
-                    wizardV2Window.RoiPreviewSurface.ActualHeight * 0.20),
+                    roiViewport.Left + roiViewport.Width * 0.15,
+                    roiViewport.Top + roiViewport.Height * 0.20),
                 new System.Windows.Point(
-                    wizardV2Window.RoiPreviewSurface.ActualWidth * 0.75,
-                    wizardV2Window.RoiPreviewSurface.ActualHeight * 0.80));
+                    roiViewport.Left + roiViewport.Width * 0.75,
+                    roiViewport.Top + roiViewport.Height * 0.80));
             if (wizardV2Window.RoiLogicalRect == originalRoi ||
                 wizardV2Window.RoiLogicalRect.Width <= 0 ||
                 wizardV2Window.RoiLogicalRect.Height <= 0 ||
                 wizardV2Window.RoiSelectionRectangle.Visibility != Visibility.Visible ||
+                wizardV2Window.RoiBackgroundImage.Stretch != System.Windows.Media.Stretch.Uniform ||
+                Math.Abs(roiViewport.Width / roiViewport.Height - 4d / 3d) > 0.01 ||
                 !wizardV2Window.RoiCoordinatesText.Text.Contains("X1 96", StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("V2 ROI 拖拽框选与坐标回填冒烟失败。");
+                throw new InvalidOperationException("V2 ROI 原比例底图、拖拽框选与坐标回填冒烟失败。");
             }
 
             wizardV2Window.RedrawRoiButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
@@ -632,8 +808,8 @@ public static class UiConstructionSmokeRunner
                 configuredDetectionItem.DetectionChildren.All(child =>
                     !string.Equals(child.Label, originalLabel, StringComparison.Ordinal)) ||
                 additionalChild is null ||
-                !additionalChild.ScopeSummary.Contains("ROI-01", StringComparison.Ordinal) ||
-                !additionalChild.ScopeSummary.Contains("ROI-02", StringComparison.Ordinal) ||
+                !additionalChild.ScopeSummary.Contains("ROI", StringComparison.Ordinal) ||
+                !additionalChild.RuleSummary.Contains("0.5", StringComparison.Ordinal) ||
                 wizardV2Window.DetectionEditorOverlay.Visibility != Visibility.Visible ||
                 wizardV2Window.DetectionLabelEditorOverlay.Visibility != Visibility.Collapsed)
             {
@@ -661,9 +837,9 @@ public static class UiConstructionSmokeRunner
             }
 
             wizardV2Window.OpenDetectionLabelEditorForSmoke(additionalLabel);
-            if (!additionalLabel.UseRoi || additionalLabel.RoiOptions.Count(roi => roi.IsSelected) != 2)
+            if (!additionalLabel.UseRoi || additionalLabel.RoiOptions.Count(roi => roi.IsSelected) != 1)
             {
-                throw new InvalidOperationException("V2 单 Label 的多 ROI 配置在重新进入时未保留。");
+                throw new InvalidOperationException("V2 单检测标签的默认 ROI 配置在重新进入时未保留。");
             }
 
             wizardV2Window.CloseDetectionEditorForSmoke();
@@ -676,9 +852,18 @@ public static class UiConstructionSmokeRunner
                 wizardV2Window.DetectionEditorOverlay.Visibility != Visibility.Visible ||
                 wizardV2Window.DetectionLabelEditorOverlay.Visibility != Visibility.Visible ||
                 wizardV2Window.DetectionEditor.ActiveLabel is null ||
-                !wizardV2Window.DetectionEditor.RuleSummary.Contains("Pass", StringComparison.Ordinal))
+                !wizardV2Window.DetectionEditor.RuleSummary.Contains("Pass", StringComparison.Ordinal) ||
+                !wizardV2Window.DetectionConfidenceLabelText.Text.Contains("可选，默认 0.5", StringComparison.Ordinal) ||
+                new[]
+                {
+                    wizardV2Window.DetectionMetricRequiredStar,
+                    wizardV2Window.DetectionMethodRequiredStar,
+                    wizardV2Window.DetectionThresholdRequiredStar,
+                    wizardV2Window.DetectionUpperThresholdRequiredStar,
+                    wizardV2Window.DetectionOutcomeRequiredStar
+                }.Any(star => star.Text != "*"))
             {
-                throw new InvalidOperationException("V2 单 Label 判定条件弹窗未并入基本信息冒烟失败。");
+                throw new InvalidOperationException("V2 检测标签判定、必填标记或可选置信度冒烟失败。");
             }
 
             wizardV2Window.CloseDetectionEditorForSmoke();
@@ -794,24 +979,55 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("V2 返回测试步后自定义函数配置未保留。");
             }
 
+            foreach (var transientItem in new[] { targetDetectionItem, addedStep })
+            {
+                wizardV2Window.InspectionItemsList.SelectedItem = transientItem;
+                wizardV2Window.RemoveSelectedInspectionItemButton.RaiseEvent(
+                    new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            }
+
+            if (wizardV2Window.InspectionItemsList.Items.Count != originalInspectionItemCount ||
+                !wizardV2Window.InspectionItems.Select(item => item.FunctionCode).SequenceEqual(originalFunctionCodes) ||
+                !wizardV2Window.InspectionItemsSemanticsText.Text.Contains("从上到下", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("V2 测试步顺序列表的加减交互冒烟失败。");
+            }
+
             wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             if (wizardV2Window.CurrentStepIndex != 4 ||
                 !wizardV2Window.Steps.Take(4).All(step => step.IsCompleted) ||
                 wizardV2Window.Steps[4].IsCompleted ||
                 !wizardV2Window.ReviewTriggerSummaryText.Text.Contains("自定义函数", StringComparison.Ordinal) ||
                 !wizardV2Window.ReviewCustomFunctionDetailsText.Text.Contains("fan_custom_check", StringComparison.Ordinal) ||
-                !wizardV2Window.ReviewModelsSummaryText.Text.Contains("Fan 主体检测", StringComparison.Ordinal) ||
-                !wizardV2Window.ReviewInspectionOrderText.Text.Contains("风扇到位", StringComparison.Ordinal))
+                !wizardV2Window.ReviewModelsSummaryText.Text.Contains(SampleProjectFactory.SampleModelName, StringComparison.Ordinal) ||
+                !wizardV2Window.ReviewInspectionOrderText.Text.Contains("风扇检测", StringComparison.Ordinal) ||
+                !wizardV2Window.ReviewTestBlocksSummaryText.Text.Contains("全部参与总判定", StringComparison.Ordinal) ||
+                wizardV2Window.ExportSequenceButton.Visibility != Visibility.Visible ||
+                wizardV2Window.ExportSequenceButton.Content?.ToString() != "导出 Sequence 与模型" ||
+                wizardV2Window.NextButton.Content?.ToString() != "应用到当前操作台")
             {
                 throw new InvalidOperationException("V2 五步向导最终页及自定义函数汇总冒烟失败。");
             }
 
+            wizardV2Window.ExportSequenceButton.RaiseEvent(
+                new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            if (wizardV2Window.ExportSequenceButton.IsEnabled ||
+                !wizardV2Window.NextButton.IsEnabled ||
+                wizardV2Window.CompletionStatusBorder.Visibility != Visibility.Visible ||
+                !wizardV2Window.CompletionStatusText.Text.Contains("当前操作台配置未发生切换", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("V2 Sequence 独立导出动作冒烟失败。");
+            }
+
             wizardV2Window.NextButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
             if (wizardV2Window.NextButton.IsEnabled ||
+                wizardV2Window.AppliedProject is null ||
+                wizardV2Window.AppliedProject.TestSequenceVersions.Single().Name != "FAN-A01" ||
+                wizardV2Window.AppliedProject.TestSequenceVersions.Single().OrderedInvocations.Any(invocation => !invocation.IsRequired) ||
                 wizardV2Window.CompletionStatusBorder.Visibility != Visibility.Visible ||
                 wizardV2Window.Steps.Any(step => !step.IsCompleted))
             {
-                throw new InvalidOperationException("V2 向导最终确认状态冒烟失败。");
+                throw new InvalidOperationException("V2 当前配置应用动作或统一总判定策略冒烟失败。");
             }
 
             const string persistedProjectName = "V2 UI Smoke Draft";
@@ -835,7 +1051,7 @@ public static class UiConstructionSmokeRunner
             Directory.CreateDirectory(Path.GetDirectoryName(ReceiptPath)!);
             await File.WriteAllTextAsync(
                 ReceiptPath,
-                $"通过{Environment.NewLine}{DateTimeOffset.UtcNow:O}{Environment.NewLine}登录窗口 + 操作员主窗口按钮/详情滚动/非空序列号门禁/单序列号单件单图/操作台仅保留测试序列设置/合格率命名/检测框保留且隐藏模型标签与置信度文字 + V2 返回操作台前端确认入口 + 独立兼容图像源设置窗口 + 经典测试序列设置窗口 + 普通检测项新增/删除 + V2 五步导航整体居中/跳步不补绿/必填失效退绿/未完成拦截/前后导航且底栏仅保留上一步下一步/图片与视频文件夹互斥选择及独立路径保持/USB 与工业相机待开发禁用状态 + 多模型库加减/图像分类移除/模型架构字段从当前前端隐藏/检测姿态分割类型映射/标签来源下拉与手动编辑 + 测试步动态模型绑定与顺序加减/内部函数标识不在前端显示/列表从上到下执行及上下移动/独立 Sequence Plan 前端移除/普通与姿态均仅基本信息和自定义函数页签/选择姿态模型自动弹出动作顺序/保存返回基本信息摘要与重新编辑入口/Model 后 Label 选择层/单 Label 独立区域与判定弹窗/第二 Label 追加保存/第一 Label 定向重编辑保留其他项/每标签整图或多命名 ROI/固定相机提示/数量范围校验/自定义函数名称文件延时与逐测试步独立配置/最终页仅汇总前端内容且无生命周期状态/既有草稿重载回归/ToolTip/最终确认",
+                $"通过{Environment.NewLine}{DateTimeOffset.UtcNow:O}{Environment.NewLine}Folder 文件名序列号 + Camera 序列号弹窗 + 操作台 sequence 导入/管理员设置 + 检测图仅叠加模型原始英文 Label 与框、不显示置信度 + sequence 驱动的检测标签/判定逻辑/本次实测/红绿 Result 表 + 生产型号 FAN-A01 + 五步 sequence 设置 + 应用到当前操作台/独立导出 + 模型删空 + ONNX 标签增删改 + 兼容模型弹窗 + 单 ROI 原比例标注底图门禁 + 置信度可选且默认 0.5 + 必填星号 + 图片/视频文件夹互斥 + 姿态动作与自定义函数隔离 + Draft 回读 + 可悬停 ToolTip",
                 cancellationToken);
             return 0;
         }

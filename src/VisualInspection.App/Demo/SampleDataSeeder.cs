@@ -13,13 +13,13 @@ public static class SampleDataSeeder
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "VisualInspectionTestDeployment",
         "acceptance-data",
-        "sample-set-01");
+        "fan-pass");
 
     public static string FailureDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "VisualInspectionTestDeployment",
         "acceptance-data",
-        "sample-set-fail");
+        "fan-fail");
 
     public static async Task<string> EnsureAsync(CancellationToken cancellationToken = default)
     {
@@ -37,7 +37,7 @@ public static class SampleDataSeeder
         for (var index = 1; index <= 12; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var path = Path.Combine(directory, $"frame-{index:00}.bmp");
+            var path = Path.Combine(directory, $"fan-{index:00}.bmp");
             if (!File.Exists(path))
             {
                 await File.WriteAllBytesAsync(path, CreateBitmap(index, includeFailure), cancellationToken);
@@ -58,25 +58,20 @@ public static class SampleDataSeeder
         var frames = new List<object>();
         for (var index = 1; index <= 12; index++)
         {
-            var action = index switch
-            {
-                >= 4 and <= 6 => "hand_near_part",
-                >= 7 and <= 9 => "hand_near_fixture",
-                >= 10 and <= 12 => "hands_clear",
-                _ => null
-            };
             frames.Add(new
             {
-                fileName = $"frame-{index:00}.bmp",
+                fileName = $"fan-{index:00}.bmp",
                 targetCounts = new Dictionary<string, int>
                 {
-                    ["螺钉"] = 4,
-                    ["标签"] = 1,
-                    ["表面瑕疵"] = includeFailure && index == 3 ? 1 : 0,
-                    ["操作员动作"] = action is null ? 0 : 1
+                    ["标签"] = includeFailure && index == 3 ? 2 : 3,
+                    ["黑线"] = 3,
+                    ["白线"] = 1,
+                    ["反向标签"] = includeFailure && index == 3 ? 1 : 0,
+                    ["反向黑线"] = 0,
+                    ["反向白线"] = 0
                 },
-                detections = CreateDetections(index, includeFailure, action is not null),
-                actions = action is null ? Array.Empty<string>() : new[] { action }
+                detections = CreateDetections(index, includeFailure),
+                actions = Array.Empty<string>()
             });
         }
 
@@ -88,24 +83,22 @@ public static class SampleDataSeeder
         };
     }
 
-    private static IReadOnlyList<object> CreateDetections(int frameIndex, bool includeFailure, bool includeAction)
+    private static IReadOnlyList<object> CreateDetections(int frameIndex, bool includeFailure)
     {
         var detections = new List<object>
         {
-            Detection("螺钉", 193, 108, 217, 132, 0.99),
-            Detection("螺钉", 423, 108, 447, 132, 0.98),
-            Detection("螺钉", 193, 228, 217, 252, 0.97),
-            Detection("螺钉", 423, 228, 447, 252, 0.96),
-            Detection("标签", 460, 20, 600, 56, 0.95)
+            Detection("标签", 212, 82, 276, 118, 0.97),
+            Detection("标签", 288, 82, 352, 118, 0.96),
+            Detection("标签", 364, 82, 428, 118, 0.95),
+            Detection("黑线", 206, 130, 246, 276, 0.94),
+            Detection("黑线", 300, 130, 340, 276, 0.93),
+            Detection("黑线", 394, 130, 434, 276, 0.92),
+            Detection("白线", 348, 128, 380, 278, 0.91)
         };
         if (includeFailure && frameIndex == 3)
         {
-            detections.Add(Detection("表面瑕疵", 300, 105, 340, 145, 0.94));
-        }
-
-        if (includeAction)
-        {
-            detections.Add(Detection("操作员动作", 36, 120, 118, 240, 0.93));
+            detections.RemoveAt(2);
+            detections.Add(Detection("反向标签", 364, 82, 428, 118, 0.94));
         }
 
         return detections;
@@ -145,33 +138,36 @@ public static class SampleDataSeeder
             for (var x = 0; x < Width; x++)
             {
                 var offset = 54 + (Height - 1 - y) * rowSize + x * bytesPerPixel;
-                var isPanel = x is >= 145 and <= 495 && y is >= 75 and <= 285;
+                var isPanel = x is >= 132 and <= 508 && y is >= 18 and <= 342;
                 var (red, green, blue) = isPanel
-                    ? ((byte)205, (byte)216, (byte)211)
+                    ? ((byte)221, (byte)228, (byte)224)
                     : ((byte)235, (byte)241, (byte)238);
 
-                if (IsScrew(x, y) || x is >= 272 and <= 368 && y is >= 160 and <= 200)
+                var dx = x - 320;
+                var dy = y - 180;
+                var radiusSquared = dx * dx + dy * dy;
+                if (radiusSquared is >= 118 * 118 and <= 132 * 132)
                 {
-                    red = 90;
-                    green = 112;
-                    blue = 102;
+                    red = 62;
+                    green = 82;
+                    blue = 73;
                 }
 
-                if (x is >= 460 and <= 600 && y is >= 20 and <= 56)
+                if (IsFanBlade(dx, dy))
+                {
+                    red = 102;
+                    green = 137;
+                    blue = 121;
+                }
+
+                if (radiusSquared <= 34 * 34)
                 {
                     red = 0;
                     green = 145;
                     blue = 95;
                 }
 
-                if (frameIndex >= 4 && x is >= 36 and <= 118 && y is >= 120 and <= 240)
-                {
-                    red = frameIndex <= 6 ? (byte)68 : frameIndex <= 9 ? (byte)85 : (byte)118;
-                    green = frameIndex <= 6 ? (byte)132 : frameIndex <= 9 ? (byte)155 : (byte)171;
-                    blue = frameIndex <= 6 ? (byte)180 : frameIndex <= 9 ? (byte)112 : (byte)144;
-                }
-
-                if (includeFailure && frameIndex == 3 && x is >= 300 and <= 340 && y is >= 105 and <= 145)
+                if (includeFailure && frameIndex == 3 && x is >= 222 and <= 276 && y is >= 138 and <= 190)
                 {
                     red = 190;
                     green = 64;
@@ -187,15 +183,24 @@ public static class SampleDataSeeder
         return bytes;
     }
 
-    private static bool IsScrew(int x, int y)
+    private static bool IsFanBlade(int x, int y)
     {
-        var centers = new[] { (205, 120), (435, 120), (205, 240), (435, 240) };
-        return centers.Any(center =>
+        for (var index = 0; index < 5; index++)
         {
-            var dx = x - center.Item1;
-            var dy = y - center.Item2;
-            return dx * dx + dy * dy <= 12 * 12;
-        });
+            var angle = (-Math.PI / 2) + index * (2 * Math.PI / 5);
+            var centerX = Math.Cos(angle) * 78;
+            var centerY = Math.Sin(angle) * 78;
+            var localX = x - centerX;
+            var localY = y - centerY;
+            var radial = localX * Math.Cos(angle) + localY * Math.Sin(angle);
+            var tangent = -localX * Math.Sin(angle) + localY * Math.Cos(angle);
+            if ((radial * radial) / (52d * 52d) + (tangent * tangent) / (25d * 25d) <= 1)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void WriteInt16(byte[] buffer, int offset, short value) =>

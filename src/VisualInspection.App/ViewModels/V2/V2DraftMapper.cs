@@ -315,7 +315,9 @@ public static class V2DraftMapper
                 item.RuleOutcomeIndex,
                 item.UseRoi,
                 item.RoiRect,
-                item.RoiId)
+                item.RoiId,
+                item.RoiReferenceWidth,
+                item.RoiReferenceHeight)
         };
         rules.AddRange(item.AdditionalRules.Select((rule, index) => CreateRule(
             rule.RuleId,
@@ -328,7 +330,9 @@ public static class V2DraftMapper
             rule.OutcomeIndex,
             item.UseRoi,
             item.RoiRect,
-            item.RoiId)));
+            item.RoiId,
+            item.RoiReferenceWidth,
+            item.RoiReferenceHeight)));
         return new RuleSetDefinition
         {
             LogicalOperator = item.RuleLogicalOperatorIndex == 1 ? RuleLogicalOperatorV2.Or : RuleLogicalOperatorV2.And,
@@ -347,7 +351,9 @@ public static class V2DraftMapper
         int outcomeIndex,
         bool useRoi,
         Rect roi,
-        Guid roiId) => new()
+        Guid roiId,
+        double roiReferenceWidth,
+        double roiReferenceHeight) => new()
         {
             RuleId = ruleId,
             ModelBindingId = binding.ModelBindingId,
@@ -387,8 +393,8 @@ public static class V2DraftMapper
                         Y1 = (int)Math.Round(roi.Y),
                         X2 = (int)Math.Round(roi.Right),
                         Y2 = (int)Math.Round(roi.Bottom),
-                        ReferenceWidth = 640,
-                        ReferenceHeight = 480
+                        ReferenceWidth = Math.Max(1, (int)Math.Round(roiReferenceWidth)),
+                        ReferenceHeight = Math.Max(1, (int)Math.Round(roiReferenceHeight))
                     }
                 ]
                 : []
@@ -526,7 +532,7 @@ public static class V2DraftMapper
                 item.RuleMethodIndex = ToRuleMethodIndex(rule.Operator);
                 item.ExpectedCountText = rule.Threshold.ToString(CultureInfo.InvariantCulture);
                 item.RangeMaximumCountText = (rule.UpperThreshold ?? rule.Threshold).ToString(CultureInfo.InvariantCulture);
-                item.ConfidenceThresholdText = rule.ConfidenceThreshold.ToString("0.00", CultureInfo.InvariantCulture);
+                item.ConfidenceThresholdText = rule.ConfidenceThreshold.ToString("0.##", CultureInfo.InvariantCulture);
                 item.RuleOutcomeIndex = rule.OutcomeWhenMatched == RuleOutcome.Fail ? 1 : 0;
                 ApplyScope(item, rule.Scope);
                 continue;
@@ -538,7 +544,7 @@ public static class V2DraftMapper
                 RuleMethodIndex = ToRuleMethodIndex(rule.Operator),
                 ThresholdText = rule.Threshold.ToString(CultureInfo.InvariantCulture),
                 UpperThresholdText = (rule.UpperThreshold ?? rule.Threshold).ToString(CultureInfo.InvariantCulture),
-                ConfidenceText = rule.ConfidenceThreshold.ToString("0.00", CultureInfo.InvariantCulture),
+                ConfidenceText = rule.ConfidenceThreshold.ToString("0.##", CultureInfo.InvariantCulture),
                 OutcomeIndex = rule.OutcomeWhenMatched == RuleOutcome.Fail ? 1 : 0
             });
         }
@@ -566,7 +572,7 @@ public static class V2DraftMapper
                 action.ModelBindingId)
             {
                 ActionCondition = action.ActionCondition,
-                ConfidenceThresholdText = action.ConfidenceThreshold.ToString("0.00", CultureInfo.InvariantCulture),
+                ConfidenceThresholdText = action.ConfidenceThreshold.ToString("0.##", CultureInfo.InvariantCulture),
                 MinimumHoldMsText = action.MinimumHoldMs.ToString(CultureInfo.InvariantCulture),
                 MaximumWaitMsText = action.MaximumWaitMs.ToString(CultureInfo.InvariantCulture)
             });
@@ -583,7 +589,13 @@ public static class V2DraftMapper
         var roi = scope.Regions.FirstOrDefault();
         if (roi is not null)
         {
+            item.RoiReferenceWidth = roi.ReferenceWidth;
+            item.RoiReferenceHeight = roi.ReferenceHeight;
             item.RoiRect = new Rect(roi.X1, roi.Y1, roi.X2 - roi.X1, roi.Y2 - roi.Y1);
+            if (item.NamedRois.Count > 0)
+            {
+                item.NamedRois[0].Rect = item.RoiRect;
+            }
         }
     }
 
@@ -673,6 +685,8 @@ public static class V2DraftMapper
         int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed >= 0 ? parsed : -1;
 
     private static double ParseConfidence(string? value) =>
-        double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : -1;
+        string.IsNullOrWhiteSpace(value)
+            ? 0.5
+            : double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : -1;
 
 }

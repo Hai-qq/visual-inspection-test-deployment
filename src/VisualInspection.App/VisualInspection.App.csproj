@@ -19,4 +19,9 @@
     <AssemblyName>VisualInspection.FrontendDemo</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(FrontendDemo)' == 'true' and Exists('$(FrontendDemoFanModelPath)') and Exists('$(FrontendDemoFanImagePath)')">
+    <EmbeddedResource Include="$(FrontendDemoFanModelPath)" LogicalName="VisualInspection.FrontendDemo.Assets.fan.onnx" />
+    <EmbeddedResource Include="$(FrontendDemoFanImagePath)" LogicalName="VisualInspection.FrontendDemo.Assets.IMG_1533.JPG" />
+  </ItemGroup>
+
 </Project>

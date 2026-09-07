@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Input;
+using VisualInspection.App.Demo;
 using VisualInspection.Core.V2.Configuration;
 using VisualInspection.Infrastructure.V2.Persistence;
 
@@ -10,9 +11,9 @@ public sealed class TestSequenceWizardV2ViewModel : ObservableObject
 {
     private readonly V2WizardServices _services;
     private readonly string _lastDraftPointerPath;
-    private string _projectName = "Fan 风扇检测";
+    private string _projectName = SampleProjectFactory.SampleProjectName;
     private string _workstation = "装配线 1 号工位";
-    private string _sequenceName = "Fan 完整性检测";
+    private string _sequenceName = SampleProjectFactory.SampleProductModel;
     private string _sequenceVersion = "V2.0";
     private string _sourceAddress = @"C:\检测图片\Fan";
     private int _sourceKindIndex;

@@ -249,6 +249,11 @@ public sealed class SchemaAndLifecycleTests
         Assert.Equal(legacy.TestSequences[0].Items[0].Id, migrated.TestStepCatalog[0].StepId);
         Assert.Equal(legacy.Targets[0].ModelBindings[0].OutputLabelId,
             migrated.TestStepCatalog[0].RuleSet!.Rules[0].OutputLabelId);
+        var deployment = Assert.Single(migrated.DeploymentBindings);
+        var sourceBinding = Assert.Single(deployment.InputSourceBindings);
+        Assert.Equal(legacy.InputSources[0].Id, sourceBinding.InputSourceId);
+        Assert.Equal(legacy.InputSources[0].Id, sourceBinding.SourceBindingId);
+        Assert.Equal(legacy.InputSources[0].Folder!.FolderPath, sourceBinding.DeviceAddress);
     }
 
     private static RuntimeValidationContext Context(Guid deploymentId, string baseDirectory) => new()

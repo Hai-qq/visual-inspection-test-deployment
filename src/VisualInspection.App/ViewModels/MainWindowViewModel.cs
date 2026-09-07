@@ -11,6 +11,7 @@ using VisualInspection.Core.Configuration;
 using VisualInspection.Core.Domain;
 using VisualInspection.Core.Execution;
 using VisualInspection.Core.Imaging;
+using VisualInspection.Core.Rules;
 using VisualInspection.Core.Security;
 using VisualInspection.Infrastructure.Analysis;
 using VisualInspection.Infrastructure.Imaging;
@@ -21,6 +22,7 @@ namespace VisualInspection.App.ViewModels;
 public sealed class MainWindowViewModel : ObservableObject
 {
     internal const double DetectionBorderThickness = 4;
+    internal const double DetectionLabelFontSize = 16;
     internal const double RoiBorderThickness = 4;
     internal const double RoiLabelFontSize = 16;
     private const double OverlayReferenceWidth = 640;
@@ -34,6 +36,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly RelayCommand _stopCommand;
     private readonly RelayCommand _resetCommand;
     private readonly JsonLineExecutionLogStore _logStore;
+    private readonly ProductionResultStore _resultStore;
     private readonly List<ExecutionAuditEntry> _pendingAudit = [];
     private CancellationTokenSource? _runCancellation;
     private bool _isRunning;
@@ -41,6 +44,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _currentResult = "等待中";
     private string _currentItemName;
     private string _currentStandard;
+    private string _currentRuleCombinationText;
     private string _currentMeasured = "实测：等待开始测试";
     private string _currentExecutionDetails;
     private ImageSource? _currentImage;
@@ -48,9 +52,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private Brush _currentResultBrush = Brushes.SlateGray;
     private bool _isRoiVisible;
     private string _currentRoiLabel = string.Empty;
-    private string _serialNumberInput = string.Empty;
     private string? _activeSerialNumber;
-    private bool _serialNumberConsumed;
     private int _folderSourceCursor;
 
     public MainWindowViewModel(ApplicationBootstrapResult bootstrap, UserSession? session = null)
@@ -68,6 +70,10 @@ public sealed class MainWindowViewModel : ObservableObject
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "VisualInspectionTestDeployment",
             "logs"));
+        _resultStore = new ProductionResultStore(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "VisualInspectionTestDeployment",
+            "results"));
 
         ProjectName = _project.Name;
         SequenceName = $"{_activeSequence.Name} · {_activeSequence.Version}" +
@@ -98,23 +104,25 @@ public sealed class MainWindowViewModel : ObservableObject
             throw new InvalidOperationException("当前测试序列中没有已启用的测试项。");
         }
 
+        var firstItem = _activeSequence.Items.First(item => item.Order == Sequence[0].Number);
         _currentItemName = Sequence[0].Name;
         _currentStandard = $"标准：{Sequence[0].Standard}";
-        _currentExecutionDetails = FormatExecutionDetails(
-            _activeSequence.Items.First(item => item.Order == Sequence[0].Number));
-        UpdateRoi(_activeSequence.Items.First(item => item.Order == Sequence[0].Number));
+        _currentRuleCombinationText = FormatRuleCombination(firstItem);
+        _currentExecutionDetails = FormatExecutionDetails(firstItem);
+        UpdateRoi(firstItem);
         if (bootstrap.PreviewFrame is not null)
         {
             _currentFrame = bootstrap.PreviewFrame;
-            var firstItem = _activeSequence.Items.First(item => item.Order == Sequence[0].Number);
             _currentImage = CreateAnnotatedImageSource(bootstrap.PreviewFrame, firstItem, []);
         }
 
         Statistics = new StatisticsViewModel();
         Logs = new ObservableCollection<ExecutionLogEntryViewModel>();
+        DetectionSummary = new ObservableCollection<DetectionSummaryRowViewModel>();
+        PopulatePendingDetectionSummary(firstItem);
         _startCommand = new AsyncRelayCommand(
             StartAsync,
-            () => !IsRunning && IsRuntimeReady && HasSerialNumber);
+            () => !IsRunning && IsInputSourceReady && IsRuntimeReady);
         _stopCommand = new RelayCommand(Stop, () => IsRunning);
         _resetCommand = new RelayCommand(Reset, () => !IsRunning);
         AddLog("INFO", _statusText);
@@ -135,14 +143,18 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool IsAdmin => _session.IsAdmin;
     public Visibility SettingsVisibility => IsAdmin ? Visibility.Visible : Visibility.Collapsed;
     public string CurrentTime => DateTime.Now.ToString("yyyy-MM-dd  HH:mm");
-    public string LogFilePath => _logStore.GetCurrentLogPath();
+    public string LogFilePath => _resultStore.GetCurrentLogPath();
     public ObservableCollection<TestSequenceItemViewModel> Sequence { get; }
     public ObservableCollection<ExecutionLogEntryViewModel> Logs { get; }
+    public ObservableCollection<DetectionSummaryRowViewModel> DetectionSummary { get; }
     public StatisticsViewModel Statistics { get; }
     public ICommand StartCommand => _startCommand;
     public ICommand StopCommand => _stopCommand;
     public ICommand ResetCommand => _resetCommand;
     public bool CanOpenSettings => !IsRunning && IsAdmin;
+    public bool CanImportSequence => !IsRunning;
+    public bool RequiresSerialNumber => _activeSource.Type != InputSourceType.Folder;
+    public Func<string?>? RequestSerialNumber { get; set; }
 
     public bool IsRunning
     {
@@ -155,6 +167,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 _stopCommand.NotifyCanExecuteChanged();
                 _resetCommand.NotifyCanExecuteChanged();
                 OnPropertyChanged(nameof(CanOpenSettings));
+                OnPropertyChanged(nameof(CanImportSequence));
             }
         }
     }
@@ -189,6 +202,12 @@ public sealed class MainWindowViewModel : ObservableObject
         private set => SetProperty(ref _currentStandard, value);
     }
 
+    public string CurrentRuleCombinationText
+    {
+        get => _currentRuleCombinationText;
+        private set => SetProperty(ref _currentRuleCombinationText, value);
+    }
+
     public string CurrentMeasured
     {
         get => _currentMeasured;
@@ -219,59 +238,44 @@ public sealed class MainWindowViewModel : ObservableObject
         private set => SetProperty(ref _currentRoiLabel, value);
     }
 
-    public string SerialNumberInput
-    {
-        get => _serialNumberInput;
-        set
-        {
-            if (SetProperty(ref _serialNumberInput, value ?? string.Empty))
-            {
-                OnPropertyChanged(nameof(SerialNumberStatusText));
-                OnPropertyChanged(nameof(HasSerialNumber));
-                _startCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
-    public bool HasSerialNumber => !string.IsNullOrWhiteSpace(SerialNumberInput);
-
-    public string SerialNumberStatusText => string.IsNullOrWhiteSpace(SerialNumberInput)
-        ? "必须先输入序列号才能开始 · 支持人工输入、扫码枪或二维码回填"
-        : "序列号已录入 · 点击“开始”后只检测一个产品 / 一张图片 · 工厂格式规则待提供";
-
     private async Task StartAsync()
     {
-        var serialNumber = SerialNumberInput.Trim();
-        if (serialNumber.Length == 0)
+        var serialNumber = RequiresSerialNumber
+            ? RequestSerialNumber?.Invoke()?.Trim()
+            : null;
+        if (RequiresSerialNumber && string.IsNullOrWhiteSpace(serialNumber))
         {
-            StatusText = "请先输入产品序列号。";
+            StatusText = "已取消本次检测；相机图源必须先录入产品序列号。";
             return;
         }
 
         ResetItems();
+        DetectionSummary.Clear();
         _pendingAudit.Clear();
         _activeSerialNumber = serialNumber;
-        _serialNumberConsumed = false;
         _runCancellation = new CancellationTokenSource();
         IsRunning = true;
         CurrentResult = "运行中";
         CurrentResultBrush = new SolidColorBrush(Color.FromRgb(0, 145, 95));
-        CurrentMeasured = $"实测：序列号 {serialNumber} · 正在采集输入图像";
-        AddLog("INFO", $"序列号 {serialNumber} 已提交，开始单件检测。");
+        CurrentMeasured = RequiresSerialNumber
+            ? $"实测：序列号 {serialNumber} · 正在采集输入图像"
+            : "实测：正在读取下一张图片，并以图片文件名作为序列号";
+        AddLog("INFO", RequiresSerialNumber
+            ? $"序列号 {serialNumber} 已提交，开始单件检测。"
+            : "开始单件检测；序列号将从图片文件名自动取得。");
         _pendingAudit.Add(new ExecutionAuditEntry
         {
             TimestampUtc = DateTimeOffset.UtcNow,
             Level = "INFO",
-            Event = "serial-run-started",
-            Message = $"序列号 {serialNumber} 开始单件检测。",
+            Event = RequiresSerialNumber ? "camera-serial-run-started" : "folder-image-run-started",
+            Message = RequiresSerialNumber
+                ? $"序列号 {serialNumber} 开始单件检测。"
+                : "开始文件夹单图检测；等待从图片名取得序列号。",
             SerialNumber = serialNumber
         });
 
         try
         {
-            var folderPath = _activeSource.Folder is null
-                ? throw new InvalidOperationException("验收运行模式需要使用文件夹图源。")
-                : ApplicationBootstrapper.ResolveFolderPath(_activeSource.Folder.FolderPath);
             await using var source = ImageSourceFactory.Create(
                 _activeSource,
                 AppContext.BaseDirectory,
@@ -280,8 +284,21 @@ public sealed class MainWindowViewModel : ObservableObject
             using var onnxProvider = onnxProbe.IsReady
                 ? OnnxYoloInspectionProvider.Create(_project, _activeSequence, AppContext.BaseDirectory)
                 : null;
-            IInspectionProvider provider = (IInspectionProvider?)onnxProvider ??
-                await ManifestInspectionProvider.LoadAsync(folderPath, _project, _runCancellation.Token);
+            IInspectionProvider provider;
+            if (onnxProvider is not null)
+            {
+                provider = onnxProvider;
+            }
+            else if (_activeSource.Folder is not null)
+            {
+                var folderPath = ApplicationBootstrapper.ResolveFolderPath(_activeSource.Folder.FolderPath);
+                provider = await ManifestInspectionProvider.LoadAsync(folderPath, _project, _runCancellation.Token);
+            }
+            else
+            {
+                throw new InvalidOperationException("相机图源没有可用的真实模型运行时，已阻止本次检测。");
+            }
+
             var progress = new InlineProgress<TestRunUpdate>(HandleRunUpdate);
             if (IsSingleImageFolderSequence())
             {
@@ -292,9 +309,12 @@ public sealed class MainWindowViewModel : ObservableObject
                     provider,
                     progress,
                     _runCancellation.Token);
-                _serialNumberConsumed = true;
                 AdvanceFolderCursor(imageResult);
-                ApplySingleFolderImageResult(imageResult, serialNumber);
+                ApplySingleFolderImageResult(imageResult);
+                await PersistProductionResultAsync(
+                    imageResult.RunResult.Verdict,
+                    imageResult.RunResult.CompletedAtUtc,
+                    _runCancellation.Token);
             }
             else
             {
@@ -311,7 +331,7 @@ public sealed class MainWindowViewModel : ObservableObject
                     UpdateStatistics(result.Verdict);
                 }
 
-                StatusText = $"序列号 {serialNumber} · {result.Summary}";
+                StatusText = $"序列号 {_activeSerialNumber} · {result.Summary}";
 
                 _pendingAudit.Add(new ExecutionAuditEntry
                 {
@@ -324,10 +344,11 @@ public sealed class MainWindowViewModel : ObservableObject
                         _ => "INFO"
                     },
                     Event = result.WasStopped ? "run-stopped" : "run-completed",
-                    Message = $"序列号 {serialNumber} · {result.Summary}",
-                    SerialNumber = serialNumber,
+                    Message = $"序列号 {_activeSerialNumber} · {result.Summary}",
+                    SerialNumber = _activeSerialNumber,
                     Verdict = result.Verdict
                 });
+                await PersistProductionResultAsync(result.Verdict, result.CompletedAtUtc, _runCancellation.Token);
             }
 
             await _logStore.AppendAsync(_pendingAudit);
@@ -340,13 +361,29 @@ public sealed class MainWindowViewModel : ObservableObject
             StatusText = "本次测试发生运行错误";
             Statistics.ErrorCount++;
             AddLog("ERROR", exception.Message);
+            string? productionLogFailure = null;
+            try
+            {
+                await PersistProductionResultAsync(
+                    InspectionVerdict.Error,
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None);
+            }
+            catch (Exception persistenceException)
+            {
+                productionLogFailure = persistenceException.Message;
+                AddLog("ERROR", $"生产 TXT 写入失败：{persistenceException.Message}");
+            }
+
             await _logStore.AppendAsync([
                 new ExecutionAuditEntry
                 {
                     TimestampUtc = DateTimeOffset.UtcNow,
                     Level = "ERROR",
                     Event = "unhandled-run-error",
-                    Message = exception.ToString(),
+                    Message = productionLogFailure is null
+                        ? exception.ToString()
+                        : $"{exception}{Environment.NewLine}生产 TXT 写入失败：{productionLogFailure}",
                     SerialNumber = _activeSerialNumber
                 }
             ]);
@@ -356,13 +393,7 @@ public sealed class MainWindowViewModel : ObservableObject
             IsRunning = false;
             _runCancellation?.Dispose();
             _runCancellation = null;
-            if (_serialNumberConsumed)
-            {
-                SerialNumberInput = string.Empty;
-            }
-
             _activeSerialNumber = null;
-            _serialNumberConsumed = false;
         }
     }
 
@@ -376,6 +407,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void Reset()
     {
         ResetItems();
+        DetectionSummary.Clear();
         CurrentResult = "等待中";
         CurrentResultBrush = Brushes.SlateGray;
         CurrentMeasured = "实测：等待开始测试";
@@ -416,6 +448,21 @@ public sealed class MainWindowViewModel : ObservableObject
         if (update.Frame is not null)
         {
             _currentFrame = update.Frame;
+            if (_activeSource.Type == InputSourceType.Folder &&
+                update.Kind == TestRunUpdateKind.FrameAcquired)
+            {
+                _activeSerialNumber = DeriveSerialNumber(update.Frame.Origin);
+                AddLog("INFO", $"图片文件名已映射为序列号：{_activeSerialNumber}。");
+                _pendingAudit.Add(new ExecutionAuditEntry
+                {
+                    TimestampUtc = DateTimeOffset.UtcNow,
+                    Level = "INFO",
+                    Event = "folder-serial-derived",
+                    Message = $"图片文件名已映射为序列号：{_activeSerialNumber}。",
+                    SerialNumber = _activeSerialNumber
+                });
+            }
+
             var definition = update.ItemOrder is null
                 ? null
                 : _activeSequence.Items.FirstOrDefault(item => item.Order == update.ItemOrder);
@@ -431,6 +478,7 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             case TestRunUpdateKind.ItemStarted when itemViewModel is not null:
                 itemViewModel.State = ExecutionState.Running;
+                DetectionSummary.Clear();
                 UpdateCurrentItem(itemViewModel);
                 CurrentResult = "运行中";
                 CurrentResultBrush = new SolidColorBrush(Color.FromRgb(0, 145, 95));
@@ -438,11 +486,15 @@ public sealed class MainWindowViewModel : ObservableObject
                 StatusText = $"运行中 · 第 {itemViewModel.Number} 项，共 {Sequence.Count} 项";
                 break;
             case TestRunUpdateKind.FrameAcquired:
-                _serialNumberConsumed = true;
                 CurrentMeasured = $"实测：{update.Message}";
                 break;
             case TestRunUpdateKind.FrameAnalyzed:
                 CurrentMeasured = $"实测：{update.Message}";
+                if (update.ItemOrder is { } analyzedOrder && update.Frame is not null)
+                {
+                    var analyzedItem = _activeSequence.Items.First(item => item.Order == analyzedOrder);
+                    UpdateDetectionSummary(analyzedItem, update.Detections ?? [], update.Frame);
+                }
                 break;
             case TestRunUpdateKind.ItemCompleted when itemViewModel is not null:
                 itemViewModel.State = ToExecutionState(update.Verdict);
@@ -493,10 +545,11 @@ public sealed class MainWindowViewModel : ObservableObject
             .All(item => item.Type == TestItemType.Normal);
 
     private void ApplySingleFolderImageResult(
-        FolderBatchImageRunResult imageResult,
-        string serialNumber)
+        FolderBatchImageRunResult imageResult)
     {
         var runResult = imageResult.RunResult;
+        var serialNumber = _activeSerialNumber ?? DeriveSerialNumber(imageResult.FrameOrigin);
+        _activeSerialNumber = serialNumber;
         var fileName = Path.GetFileName(imageResult.FrameOrigin) is { Length: > 0 } name
             ? name
             : "当前图片";
@@ -532,6 +585,40 @@ public sealed class MainWindowViewModel : ObservableObject
             : GetVerdictBrush(runResult.Verdict);
     }
 
+    private async Task PersistProductionResultAsync(
+        InspectionVerdict verdict,
+        DateTimeOffset completedAt,
+        CancellationToken cancellationToken)
+    {
+        var result = await _resultStore.AppendAsync(new ProductionResultRecord
+        {
+            Machine = Environment.MachineName,
+            CompletedAt = completedAt,
+            Workstation = _project.Workstation,
+            ProductModel = _activeSequence.Name,
+            EmployeeNumber = _session.Username,
+            SerialNumber = _activeSerialNumber ?? string.Empty,
+            Verdict = verdict,
+            Frame = _currentFrame
+        }, cancellationToken);
+        AddLog("INFO", result.ImagePath is null
+            ? $"生产结果已写入：{result.LogPath}"
+            : $"生产结果与图片已保存：{result.ImagePath}");
+    }
+
+    private static string DeriveSerialNumber(string? imageOrigin)
+    {
+        var serialNumber = string.IsNullOrWhiteSpace(imageOrigin)
+            ? string.Empty
+            : Path.GetFileNameWithoutExtension(imageOrigin).Trim();
+        if (serialNumber.Length == 0)
+        {
+            throw new InvalidDataException("文件夹图片名不能为空；图片主文件名必须就是产品序列号。");
+        }
+
+        return serialNumber;
+    }
+
     private void AdvanceFolderCursor(FolderBatchImageRunResult imageResult)
     {
         _folderSourceCursor = imageResult.TotalFileCount <= 0
@@ -553,12 +640,69 @@ public sealed class MainWindowViewModel : ObservableObject
         CurrentItemName = activeItem.Name;
         CurrentStandard = $"标准：{activeItem.Standard}";
         var definition = _activeSequence.Items.First(item => item.Order == activeItem.Number);
+        CurrentRuleCombinationText = FormatRuleCombination(definition);
         CurrentExecutionDetails = FormatExecutionDetails(definition);
+        PopulatePendingDetectionSummary(definition);
         UpdateRoi(definition);
         if (_currentFrame is not null)
         {
             CurrentImage = CreateAnnotatedImageSource(_currentFrame, definition, []);
         }
+    }
+
+    private void UpdateDetectionSummary(
+        TestItemDefinition item,
+        IReadOnlyList<TargetDetection> detections,
+        ImageFrame frame)
+    {
+        DetectionSummary.Clear();
+        foreach (var rule in item.Rules)
+        {
+            var target = _project.Targets.First(candidate => candidate.Id == rule.TargetId);
+            var detectedCount = SpatialDetectionCounter.Count(detections, rule, frame.Width, frame.Height);
+            var evaluation = CountRuleEvaluator.Evaluate(
+                new CountRule(
+                    target.Name,
+                    rule.Metric,
+                    rule.Operator,
+                    rule.Threshold,
+                    rule.UpperThreshold,
+                    rule.ExpectedCount,
+                    rule.OutcomeWhenMatched),
+                detectedCount);
+            DetectionSummary.Add(new DetectionSummaryRowViewModel(
+                target.Name,
+                rule,
+                detectedCount,
+                evaluation));
+        }
+    }
+
+    private void PopulatePendingDetectionSummary(TestItemDefinition item)
+    {
+        DetectionSummary.Clear();
+        foreach (var rule in item.Rules)
+        {
+            var target = _project.Targets.First(candidate => candidate.Id == rule.TargetId);
+            DetectionSummary.Add(new DetectionSummaryRowViewModel(target.Name, rule));
+        }
+    }
+
+    private static string FormatRuleCombination(TestItemDefinition item)
+    {
+        if (item.Type == TestItemType.PoseSequence)
+        {
+            return "判定逻辑：按姿态动作顺序";
+        }
+
+        if (item.Rules.Count <= 1)
+        {
+            return "判定逻辑：单条规则";
+        }
+
+        return item.RuleOperator == RuleLogicalOperator.And
+            ? "组合逻辑：全部满足（AND）"
+            : "组合逻辑：任一满足（OR）";
     }
 
     private void UpdateRoi(TestItemDefinition definition)
@@ -700,7 +844,39 @@ public sealed class MainWindowViewModel : ObservableObject
                 (detection.X2 - detection.X1) * scaleX,
                 (detection.Y2 - detection.Y1) * scaleY);
             context.DrawRectangle(null, pen, rectangle);
+            DrawOverlayLabel(
+                context,
+                ResolveDetectionOverlayLabel(_project, detection.ModelBindingId),
+                rectangle.Left,
+                rectangle.Top,
+                color,
+                imageWidth,
+                imageHeight,
+                DetectionLabelFontSize * overlayScale);
         }
+    }
+
+    internal static string ResolveDetectionOverlayLabel(
+        ProjectConfiguration project,
+        Guid modelBindingId)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var binding = project.Targets
+            .SelectMany(target => target.ModelBindings)
+            .FirstOrDefault(candidate => candidate.Id == modelBindingId);
+        if (binding is null)
+        {
+            return "Unknown_Label";
+        }
+
+        var labelName = project.Models
+            .FirstOrDefault(model => model.Id == binding.ModelId)?
+            .Labels
+            .FirstOrDefault(label => label.Id == binding.OutputLabelId)?
+            .Name;
+        return string.IsNullOrWhiteSpace(labelName)
+            ? $"Label_{binding.OutputLabelId}"
+            : labelName;
     }
 
     internal static double GetOverlayScale(int imageWidth, int imageHeight)

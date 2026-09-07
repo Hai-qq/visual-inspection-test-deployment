@@ -86,7 +86,8 @@ public sealed class FunctionCodeCatalog(ProjectConfigurationV2 project)
     {
         var normalized = Normalize(name);
         var prefix = normalized.Length > 48 ? normalized[..48].TrimEnd('_', '-') : normalized;
-        return $"{prefix}_{stepId:N}"[..Math.Min(prefix.Length + 9, 64)];
+        var stableSuffix = stepId.ToString("N").ToUpperInvariant();
+        return $"{prefix}_{stableSuffix}"[..Math.Min(prefix.Length + 9, 64)];
     }
 
     public static string Normalize(string value)

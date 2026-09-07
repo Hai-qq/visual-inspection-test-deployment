@@ -143,6 +143,42 @@ public static class ProjectConfigurationV1Migrator
                 : migrated;
         }).ToList();
 
+        var sourceAdapters = source.InputSources.Select(input =>
+            string.IsNullOrWhiteSpace(input.Camera?.AdapterId)
+                ? KnownAdapterIds.UnconfiguredCamera
+                : input.Camera.AdapterId).ToList();
+        var stationId = string.IsNullOrWhiteSpace(source.Workstation)
+            ? "migrated-station"
+            : source.Workstation;
+        var deployment = new DeploymentBinding
+        {
+            DeploymentBindingId = DeriveGuid(source.Id, "deployment-binding"),
+            Name = $"{stationId} migrated deployment",
+            StationId = stationId,
+            InputSourceBindings = source.InputSources.Select((input, index) => new InputSourceDeploymentBinding
+            {
+                SourceBindingId = input.Id,
+                InputSourceId = input.Id,
+                CameraAdapterId = sourceAdapters[index],
+                ConnectionProfileId = input.Type == Legacy.InputSourceType.Folder
+                    ? "legacy-folder-source"
+                    : "legacy-camera-source",
+                DeviceAddress = input.Type == Legacy.InputSourceType.Folder
+                    ? input.Folder?.FolderPath ?? string.Empty
+                    : input.Camera?.DeviceId ?? string.Empty
+            }).ToList(),
+            LineResultBinding = new LineResultDeploymentBinding
+            {
+                AdapterId = KnownAdapterIds.UnconfiguredLineResult,
+                ConnectionProfileId = "legacy-unconfigured-line"
+            },
+            AdapterAllowlist = artifacts.Select(artifact => artifact.AdapterId)
+                .Concat(sourceAdapters)
+                .Append(KnownAdapterIds.UnconfiguredLineResult)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+        };
+
         return new ProjectConfigurationV2
         {
             ProjectId = source.Id,
@@ -153,7 +189,7 @@ public static class ProjectConfigurationV1Migrator
             InputSourceDefinitions = inputSources,
             TestStepCatalog = steps.Values.OrderBy(step => step.StepId).ToList(),
             TestSequenceVersions = sequences,
-            DeploymentBindings = [],
+            DeploymentBindings = [deployment],
             RetiredFunctionCodes = []
         };
     }
