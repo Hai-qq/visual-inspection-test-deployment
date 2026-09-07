@@ -125,6 +125,7 @@ public static class ProjectConfigurationV2CompatibilityConverter
                 Enabled = true,
                 IsRequired = invocation.IsRequired,
                 DelayMs = invocation.DelayMs,
+                CustomFunction = step.CustomFunction,
                 RuleOperator = step.RuleSet.LogicalOperator == RuleLogicalOperatorV2.Or
                     ? RuleLogicalOperator.Or
                     : RuleLogicalOperator.And,
@@ -135,6 +136,7 @@ public static class ProjectConfigurationV2CompatibilityConverter
         var sourceDefinition = ConvertSource(source, deploymentSource, sequenceDirectory);
         return new ProjectConfiguration
         {
+            IsUserConfigured = true,
             Id = project.ProjectId,
             Name = project.Name,
             Workstation = project.Workstation,
@@ -202,6 +204,11 @@ public static class ProjectConfigurationV2CompatibilityConverter
         string sequenceDirectory)
     {
         var address = deployment?.DeviceAddress ?? string.Empty;
+        if (source.Kind == InputSourceKind.VideoFolder ||
+            (source.Kind == InputSourceKind.Folder && source.Name == "视频文件夹"))
+        {
+            throw new NotSupportedException("视频文件夹尚未接入解码适配器，不能作为图片文件夹运行。");
+        }
         if (source.Kind == InputSourceKind.Folder)
         {
             if (string.IsNullOrWhiteSpace(address))

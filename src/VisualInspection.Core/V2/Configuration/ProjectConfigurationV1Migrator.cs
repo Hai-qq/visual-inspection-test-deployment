@@ -94,6 +94,7 @@ public static class ProjectConfigurationV1Migrator
                 StepId = item.Id,
                 FunctionCode = FunctionCodeCatalog.CreateStableCode(item.Name, item.Id),
                 Name = item.Name,
+                CustomFunction = item.CustomFunction,
                 Kind = stepKind,
                 ModelBindings = bindings,
                 RuleSet = item.Type == Legacy.TestItemType.Normal ? MapRuleSet(item, legacyBindingLookup) : null,

@@ -10,6 +10,7 @@ public static class ConfigurationSchema
 
 public sealed record ProjectConfiguration
 {
+    public bool IsUserConfigured { get; init; }
     public Guid Id { get; init; } = Guid.NewGuid();
     public string Name { get; init; } = string.Empty;
     public string Workstation { get; init; } = string.Empty;
@@ -106,6 +107,7 @@ public sealed record TestItemDefinition
     public bool Enabled { get; init; } = true;
     public bool IsRequired { get; init; } = true;
     public int? DelayMs { get; init; }
+    public V2.Configuration.CustomFunctionConfiguration? CustomFunction { get; init; }
     public RuleLogicalOperator RuleOperator { get; init; } = RuleLogicalOperator.And;
     public List<TargetRuleDefinition> Rules { get; init; } = [];
     public List<PoseStepDefinition> PoseSteps { get; init; } = [];

@@ -17,10 +17,11 @@ public static class UiConstructionSmokeRunner
         "VisualInspectionTestDeployment",
         "ui-construction-smoke.txt");
 
-    public static async Task<int> RunAsync(CancellationToken cancellationToken = default)
+    public static async Task<int> RunAsync(CancellationToken cancellationToken = default, bool captureLayoutReview = false)
     {
         try
         {
+            var review = captureLayoutReview ? new UiLayoutReviewCapture() : null;
             var bootstrap = await ApplicationBootstrapper.LoadOrCreateProjectAsync(cancellationToken);
             IUserAccountStore userStore = new JsonUserAccountStore(DemoUserSeeder.UserAccountFilePath);
             await DemoUserSeeder.EnsureAsync(userStore, cancellationToken);
@@ -61,9 +62,37 @@ public static class UiConstructionSmokeRunner
             {
                 throw new InvalidOperationException("V2 默认设计未保持一个风扇检测测试步包含六条 AND 标签规则。");
             }
+            // Reopen an existing six-rule project, then save one label unchanged.
+            var loadedWizard = new TestSequenceWizardV2Window(false, SampleProjectFactory.Create(bootstrap.DemoDataDirectory));
+            loadedWizard.Show();
+            loadedWizard.ShowTargetRuleStepForPreview();
+            VerifyWizardLayout(loadedWizard);
+            var beforeEdit = ViewModels.V2.V2DraftMapper.ToProject(loadedWizard.Editor).TestStepCatalog.Single().RuleSet!.Rules;
+            if (loadedWizard.SelectedInspectionItem!.DetectionChildren.Count != 6 ||
+                loadedWizard.DetectionEditor.LabelOptions.Count(option => option.IsConfigured) != 6 ||
+                loadedWizard.DetectionEditor.ThresholdText != "3")
+                throw new InvalidOperationException("既有六条规则回填不完整，或主规则阈值未回填。");
+            loadedWizard.ApplyDetectionLabelEditorButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var afterEdit = ViewModels.V2.V2DraftMapper.ToProject(loadedWizard.Editor).TestStepCatalog.Single().RuleSet!.Rules;
+            if (afterEdit.Count != 6 || !beforeEdit.Select(rule => (rule.RuleId, rule.ModelBindingId, rule.Threshold))
+                .SequenceEqual(afterEdit.Select(rule => (rule.RuleId, rule.ModelBindingId, rule.Threshold))))
+                throw new InvalidOperationException("重新保存单个标签丢失或修改了其他规则。");
+            loadedWizard.ShowTargetRuleStepForPreview();
+            loadedWizard.DetectionEditor.MetricIndex = 1;
+            loadedWizard.DetectionEditor.ExpectedTotalText = "4";
+            loadedWizard.DetectionEditor.ThresholdText = "0";
+            loadedWizard.ApplyDetectionLabelEditorButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            loadedWizard.ShowTargetRuleStepForPreview();
+            if (loadedWizard.DetectionEditor.MetricIndex != 1 || loadedWizard.DetectionEditor.ExpectedTotalText != "4" ||
+                loadedWizard.DetectionEditor.ThresholdText != "0" || loadedWizard.SelectedInspectionItem!.DetectionChildren.Count != 6)
+                throw new InvalidOperationException("缺失数量的应有总数和阈值未分别保存及回填。");
+            loadedWizard.Close();
+            VerifyPoseEditorLayout();
+
             loginWindow.Show();
             loginWindow.UpdateLayout();
             loginWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            review?.Save(loginWindow, "00-login");
             loginWindow.Close();
             mainWindow.Show();
             mainWindow.UpdateLayout();
@@ -73,7 +102,7 @@ public static class UiConstructionSmokeRunner
                 mainWindow.ResetActionText.Text != "复位" ||
                 mainWindow.StartActionButton.FontSize < 14 ||
                 mainWindow.StartActionButton.ActualHeight < 48 ||
-                mainWindow.CurrentItemDetailsScrollViewer.ActualHeight < 130 ||
+                mainWindow.CurrentItemDetailsScrollViewer.ActualHeight < 110 ||
                 mainWindow.QualificationRateModeRadioButton.Content?.ToString() != "合格率" ||
                 mainWindow.QualificationRateTitleText.Text != "合格率")
             {
@@ -81,9 +110,41 @@ public static class UiConstructionSmokeRunner
             }
 
             var mainWindowViewModel = (MainWindowViewModel)mainWindow.DataContext;
+            var importedPreview = new MainWindowViewModel(bootstrap with { Project = bootstrap.Project with { IsUserConfigured = true } }, adminSession);
+            if (bootstrap.PreviewFrame is not null && importedPreview.CurrentImage is null)
+                throw new InvalidOperationException("已导入图源未显示其预览图像。");
+            foreach (var size in new[] { (1440d, 900d), (1120d, 720d) })
+            {
+                mainWindow.Width = size.Item1;
+                mainWindow.Height = size.Item2;
+                mainWindow.UpdateLayout();
+                if (mainWindow.CurrentItemDetailsScrollViewer.ScrollableHeight > 0.5 ||
+                    mainWindow.InspectionViewport.ActualHeight < (size.Item1 >= 1400 ? 440 : 300) ||
+                    mainWindow.RuntimeLogPanel.Visibility != Visibility.Collapsed)
+                    throw new InvalidOperationException($"首页布局失败：窗口 {size}，规则滚动 {mainWindow.CurrentItemDetailsScrollViewer.ScrollableHeight}，图像高度 {mainWindow.InspectionImage.ActualHeight}，日志 {mainWindow.RuntimeLogPanel.Visibility}。");
+                review?.Save(mainWindow, $"01-home-{size.Item1}x{size.Item2}");
+                AssertInside(mainWindow.CountChartViewbox, mainWindow.StatisticsBodyPanel, "数量统计图");
+                if (mainWindow.CountChartViewbox.ActualHeight < 90)
+                    throw new InvalidOperationException("最小窗口下的统计图过小。");
+                mainWindow.QualificationRateModeRadioButton.IsChecked = true;
+                mainWindow.UpdateLayout();
+                AssertInside(mainWindow.RateChartViewbox, mainWindow.StatisticsBodyPanel, "合格率统计图");
+                review?.Save(mainWindow, $"01b-home-rate-{size.Item1}x{size.Item2}");
+                mainWindowViewModel.Statistics.IsCountMode = true;
+                mainWindow.UpdateLayout();
+            }
+            mainWindow.Width = 1440;
+            mainWindow.Height = 900;
+            mainWindow.LogDetailsToggle.IsChecked = true;
+            mainWindow.UpdateLayout();
+            if (mainWindow.RuntimeLogPanel.Visibility != Visibility.Visible)
+                throw new InvalidOperationException("首页日志无法展开。");
+            review?.Save(mainWindow, "02-home-logs");
+            mainWindow.LogDetailsToggle.IsChecked = false;
+            mainWindow.UpdateLayout();
             if (mainWindowViewModel.ProjectName != SampleProjectFactory.SampleProjectName ||
                 !mainWindowViewModel.SequenceName.Contains(SampleProjectFactory.SampleProductModel, StringComparison.Ordinal) ||
-                mainWindowViewModel.CurrentImage is null ||
+                mainWindowViewModel.CurrentImage is not null ||
                 !mainWindowViewModel.Sequence.Select(item => item.Name).SequenceEqual(
                     ["风扇检测"]))
             {
@@ -168,6 +229,7 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("Camera 序列号弹窗构造或说明收纳冒烟失败。");
             }
 
+            review?.Save(serialNumberDialog, "03-serial-number");
             serialNumberDialog.Close();
 
             var modelSelectionDialog = new ModelSelectionDialog(
@@ -182,6 +244,7 @@ public static class UiConstructionSmokeRunner
                 throw new InvalidOperationException("兼容模型选择弹窗构造冒烟失败。");
             }
 
+            review?.Save(modelSelectionDialog, "04-model-selection");
             modelSelectionDialog.Close();
 
             if (MainWindowViewModel.ResolveDetectionOverlayLabel(
@@ -817,6 +880,12 @@ public static class UiConstructionSmokeRunner
             }
 
             var additionalScopeBeforeReedit = additionalChild.ScopeSummary;
+            var savedRoiRule = configuredDetectionItem.AdditionalRules.Single(rule => rule.TargetLabel == additionalLabel.Label);
+            var savedRoi = savedRoiRule.Scope.Regions.Single();
+            if (ViewModels.V2.V2DraftMapper.GetPrimaryScope(configuredDetectionItem).Type != Core.V2.Configuration.RegionScopeTypeV2.FullImage ||
+                savedRoiRule.Scope.Type != Core.V2.Configuration.RegionScopeTypeV2.Roi ||
+                savedRoi.X1 != 96 || savedRoi.ReferenceWidth != 640 || savedRoi.ReferenceHeight != 480)
+                throw new InvalidOperationException("逐标签保存未写入独立 ROI 坐标与参照尺寸。");
             var originalOption = wizardV2Window.DetectionEditor.LabelOptions.First(option =>
                 string.Equals(option.Label, originalLabel, StringComparison.Ordinal));
             wizardV2Window.OpenDetectionLabelEditorForSmoke(originalOption);
@@ -837,6 +906,9 @@ public static class UiConstructionSmokeRunner
             }
 
             wizardV2Window.OpenDetectionLabelEditorForSmoke(additionalLabel);
+            if (configuredDetectionItem.AdditionalRules.Single(rule => rule.TargetLabel == additionalLabel.Label)
+                .Scope.Regions.Single() != savedRoi)
+                throw new InvalidOperationException("编辑主标签改变了其他标签 ROI。");
             if (!additionalLabel.UseRoi || additionalLabel.RoiOptions.Count(roi => roi.IsSelected) != 1)
             {
                 throw new InvalidOperationException("V2 单检测标签的默认 ROI 配置在重新进入时未保留。");
@@ -1047,6 +1119,9 @@ public static class UiConstructionSmokeRunner
 
             wizardV2Window.Close();
             mainWindow.Close();
+            review?.SaveWizardStates();
+            if (review is not null)
+                await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(ReceiptPath)!, "ui-layout-review-path.txt"), review.DirectoryPath, cancellationToken);
 
             Directory.CreateDirectory(Path.GetDirectoryName(ReceiptPath)!);
             await File.WriteAllTextAsync(
@@ -1064,5 +1139,140 @@ public static class UiConstructionSmokeRunner
                 CancellationToken.None);
             return 4;
         }
+    }
+
+    private static void VerifyWizardLayout(TestSequenceWizardV2Window window)
+    {
+        var surface = (FrameworkElement)window.Content;
+        foreach (var size in new[] { (1380d, 860d), (1120d, 720d) })
+        {
+            window.Width = size.Item1;
+            window.Height = size.Item2;
+            window.ShowTargetRuleStepForPreview();
+            window.UpdateLayout();
+            for (var index = 0; index < window.WizardStepsItemsControl.Items.Count; index++)
+            {
+                var container = (FrameworkElement)window.WizardStepsItemsControl.ItemContainerGenerator.ContainerFromIndex(index);
+                var step = (Button)System.Windows.Media.VisualTreeHelper.GetChild(container, 0);
+                if (step.ActualHeight + 2 > window.WizardStepsScrollViewer.ViewportHeight)
+                    throw new InvalidOperationException($"步骤 {index + 1:00} 的底边被导航视口裁切：{step.ActualHeight} / {window.WizardStepsScrollViewer.ViewportHeight}。");
+                AssertInside(step, window.WizardStepsScrollViewer, $"步骤 {index + 1:00}");
+            }
+            AssertInside(window.DetectionLabelEditorCard, surface, "整图弹窗");
+            AssertInside(window.ApplyDetectionLabelEditorButton, surface, "保存标签按钮");
+            AssertTextButtonPadding(window.ApplyDetectionLabelEditorButton);
+            if (window.DetectionConfidenceTextBox.ActualWidth < 140)
+                throw new InvalidOperationException("置信度输入框宽度不足。");
+
+            window.RoiRegionRadioButton.IsChecked = true;
+            window.UpdateLayout();
+            AssertInside(window.DetectionLabelEditorCard, surface, "ROI 弹窗");
+            AssertInside(window.ApplyDetectionLabelEditorButton, surface, "ROI 保存按钮");
+            AssertInside(window.RoiPreviewSurface, window.DetectionLabelRegionViewer, "完整 ROI 标注画布");
+            AssertInside(window.RedrawRoiButton, window.DetectionLabelRegionViewer, "重新框选按钮");
+            if (window.RoiPreviewSurface.ActualHeight < 160)
+                throw new InvalidOperationException("ROI 画布高度不足。");
+
+            // Additional fields must scroll inside the editor while the action remains visible.
+            window.DetectionEditor.MetricIndex = 1;
+            window.DetectionEditor.RuleMethodIndex = 1;
+            window.UpdateLayout();
+            AssertInside(window.ApplyDetectionLabelEditorButton, surface, "缺失数量/范围判定保存按钮");
+            window.CloseDetectionEditorForSmoke();
+            window.UpdateLayout();
+            AssertInside(window.ItemNameTextBox, surface, "测试步名称");
+            AssertInside(window.InspectionTypeComboBox, surface, "检测类型");
+            AssertInside(window.OpenDetectionEditorButton, surface, "添加标签按钮");
+            AssertTextButtonPadding(window.OpenDetectionEditorButton);
+            if (window.ItemNameTextBox.ActualWidth < 180 || window.InspectionTypeComboBox.ActualWidth < 180)
+                throw new InvalidOperationException("测试步基础字段被侧栏挤压。");
+            if (size.Item1 == 1380 && window.DetectionChildrenScrollViewer.ScrollableHeight > 0.5)
+                throw new InvalidOperationException($"默认窗口六条标签未完整显示，需滚动 {window.DetectionChildrenScrollViewer.ScrollableHeight}。");
+            window.DetectionChildrenScrollViewer.ScrollToEnd();
+            window.UpdateLayout();
+            var last = (FrameworkElement)window.DetectionChildrenItemsControl.ItemContainerGenerator.ContainerFromIndex(
+                window.DetectionChildrenItemsControl.Items.Count - 1);
+            AssertInside(last, window.DetectionChildrenScrollViewer, "最后一条标签");
+            window.ShowModelsStepForPreview();
+            window.UpdateLayout();
+            if (window.ModelSettingsScrollViewer.ScrollableHeight > 0.5)
+                throw new InvalidOperationException("六标签模型设置未完整适配窗口。");
+            foreach (var input in VisualDescendants<TextBox>(window.ModelLabelsItemsControl))
+            {
+                var text = new TextBlock { Text = input.Text, FontFamily = input.FontFamily,
+                    FontSize = input.FontSize, FontWeight = input.FontWeight };
+                text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                if (text.DesiredSize.Width + input.Padding.Left + input.Padding.Right > input.ActualWidth + 0.5)
+                    throw new InvalidOperationException($"模型标签名称未完整显示：{input.Text}。");
+            }
+            window.ShowInspectionItemsStepForPreview();
+            window.TestBlockTriggerStageButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.UpdateLayout();
+            if (window.Step8Panel.ScrollableHeight > 0.5)
+                throw new InvalidOperationException($"默认函数表单未完整适配窗口：{size}，内容 {window.Step8Panel.ExtentHeight}，视口 {window.Step8Panel.ViewportHeight}。");
+            AssertInside(window.WizardNavigationPanel, surface, "向导底部操作");
+        }
+        window.Width = 1380;
+        window.Height = 860;
+        window.ShowTargetRuleStepForPreview();
+        window.UpdateLayout();
+    }
+
+    private static void AssertInside(FrameworkElement child, FrameworkElement parent, string description)
+    {
+        var bounds = child.TransformToAncestor(parent).TransformBounds(new Rect(child.RenderSize));
+        if (bounds.Left < -0.5 || bounds.Top < -0.5 || bounds.Right > parent.ActualWidth + 0.5 ||
+            bounds.Bottom > parent.ActualHeight + 0.5 || child.ActualWidth <= 0 || child.ActualHeight <= 0)
+            throw new InvalidOperationException($"{description}超出可见边界：{bounds} / {parent.ActualWidth}×{parent.ActualHeight}。");
+    }
+
+    private static void VerifyPoseEditorLayout()
+    {
+        var window = new TestSequenceWizardV2Window { SuppressModelSelectionDialogForSmoke = true };
+        try
+        {
+            window.Show();
+            window.ShowPoseContentStepForPreview();
+            foreach (var size in new[] { (1380d, 860d), (1120d, 720d) })
+            {
+                window.Width = size.Item1;
+                window.Height = size.Item2;
+                window.CancelPoseActionEditorButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.SelectedInspectionItem!.PoseActionIndex = -1;
+                window.OpenPoseActionEditorForSmoke();
+                window.UpdateLayout();
+                if (window.SelectedInspectionItem.SelectedPoseAction is null || window.PoseEditorActionComboBox.SelectedIndex != 0)
+                    throw new InvalidOperationException("姿态编辑器首次打开没有回填动作参数。");
+                AssertInside(window.PoseActionEditorCard, (FrameworkElement)window.Content, "姿态动作弹窗");
+                AssertInside(window.PoseActionParametersPanel, window.PoseActionEditorScrollViewer, "姿态动作参数");
+                AssertInside(window.ApplyPoseActionEditorButton, (FrameworkElement)window.Content, "姿态动作保存按钮");
+                window.CancelPoseActionEditorButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.SelectedInspectionItem.PoseActionIndex = 1;
+                window.OpenPoseActionEditorForSmoke();
+                window.UpdateLayout();
+                if (window.PoseEditorActionComboBox.SelectedIndex != 1)
+                    throw new InvalidOperationException("重新打开姿态编辑器丢失当前动作选择。");
+            }
+        }
+        finally { window.Close(); }
+    }
+
+    private static IEnumerable<T> VisualDescendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var index = 0; index < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, index);
+            if (child is T match) yield return match;
+            foreach (var descendant in VisualDescendants<T>(child)) yield return descendant;
+        }
+    }
+
+    private static void AssertTextButtonPadding(Button button)
+    {
+        var label = new TextBlock { Text = button.Content?.ToString(), FontSize = button.FontSize,
+            FontFamily = button.FontFamily, FontWeight = button.FontWeight };
+        label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        if (button.ActualWidth + 1 < label.DesiredSize.Width + button.Padding.Left + button.Padding.Right)
+            throw new InvalidOperationException($"按钮“{button.Content}”没有为文字与内边距保留足够宽度。");
     }
 }

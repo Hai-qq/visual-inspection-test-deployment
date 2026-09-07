@@ -1022,6 +1022,13 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         PoseActionEditorStatusText.Text = "动作设置";
         Step5Panel.Visibility = Visibility.Visible;
         UpdateLayout();
+        // ItemsSource changes can transiently clear the two-way selected index while switching test steps.
+        // Restore a valid selection only after the new action list has reached the editor.
+        if (item.PoseSteps.Count > 0)
+        {
+            item.PoseActionIndex = Math.Clamp(item.PoseActionIndex, 0, item.PoseSteps.Count - 1);
+            PoseEditorActionComboBox.GetBindingExpression(System.Windows.Controls.Primitives.Selector.SelectedIndexProperty)?.UpdateTarget();
+        }
     }
 
     private void ApplyPoseActionEditor_Click(object sender, RoutedEventArgs e)
@@ -1173,6 +1180,14 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         }
 
         DetectionEditor.BeginLabelEdit(option);
+        // Load the selected label's own coordinates into the shared drawing surface.
+        if (option.Scope.Regions.FirstOrDefault() is { } savedRoi)
+        {
+            item.RoiReferenceWidth = savedRoi.ReferenceWidth;
+            item.RoiReferenceHeight = savedRoi.ReferenceHeight;
+            item.NamedRois[0].Rect = new Rect(savedRoi.X1, savedRoi.Y1,
+                savedRoi.X2 - savedRoi.X1, savedRoi.Y2 - savedRoi.Y1);
+        }
         DetectionLabelEditorStatusText.Text = option.IsConfigured
             ? $"正在重新编辑检测标签“{option.Label}”；保存只更新这一项。"
             : $"正在配置新检测标签“{option.Label}”；保存后可继续选择下一个。";
@@ -1248,7 +1263,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             return;
         }
 
-        if (option.UseRoi && item.RoiBackgroundImage is null)
+        if (option.UseRoi && item.RoiBackgroundImage is null && option.Scope.Regions.Count == 0)
         {
             DetectionLabelEditorStatusText.Text = "请先导入一张标注底图，再框选 ROI。";
             return;
@@ -1260,7 +1275,8 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             return;
         }
 
-        if (!IsNonNegativeInteger(DetectionEditor.ThresholdText) ||
+        if ((DetectionEditor.MetricIndex == 1 && !IsNonNegativeInteger(DetectionEditor.ExpectedTotalText)) ||
+            !IsNonNegativeInteger(DetectionEditor.ThresholdText) ||
             !IsConfidence(DetectionEditor.ConfidenceText) ||
             (DetectionEditor.RuleMethodIndex == 1 &&
              (!IsNonNegativeInteger(DetectionEditor.UpperThresholdText) ||
@@ -1271,6 +1287,27 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         }
 
         DetectionEditor.CommitActiveLabel();
+        if (!option.UseRoi)
+        {
+            option.Scope = new RegionScopeDefinitionV2();
+        }
+        else if (item.RoiBackgroundImage is not null)
+        {
+            var roi = item.NamedRois.First();
+            option.Scope = new RegionScopeDefinitionV2
+            {
+                Type = RegionScopeTypeV2.Roi,
+                Regions = [new RegionOfInterestV2
+                {
+                    RegionId = option.Scope.Regions.FirstOrDefault()?.RegionId ?? Guid.NewGuid(),
+                    Name = roi.Name,
+                    X1 = (int)Math.Round(roi.Rect.Left), Y1 = (int)Math.Round(roi.Rect.Top),
+                    X2 = (int)Math.Round(roi.Rect.Right), Y2 = (int)Math.Round(roi.Rect.Bottom),
+                    ReferenceWidth = (int)item.RoiReferenceWidth,
+                    ReferenceHeight = (int)item.RoiReferenceHeight
+                }]
+            };
+        }
         var child = new DetectionChildPreview(option.Label, option.ScopeSummary, option.RuleSummary);
         var existingChild = item.DetectionChildren.FirstOrDefault(candidate =>
             string.Equals(candidate.Label, option.Label, StringComparison.Ordinal));
@@ -1296,6 +1333,9 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
     private void SynchronizeDetectionRules(InspectionItemPreview item)
     {
+        var otherModelRules = item.AdditionalRules.Where(rule =>
+            rule.Model.ModelArtifactId != item.Model.ModelArtifactId &&
+            item.DetectionChildren.Any(child => child.Label == rule.TargetLabel)).ToArray();
         foreach (var rule in item.AdditionalRules)
         {
             rule.PropertyChanged -= ConfigurationPropertyChanged;
@@ -1320,6 +1360,10 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         var primary = configuredOptions[0];
         item.Model = DetectionEditor.Model;
+        item.PrimaryRuleId = primary.RuleId;
+        item.ModelBindingId = primary.ModelBindingId;
+        item.PrimaryScope = primary.Scope;
+        item.ExpectedTotalText = primary.ExpectedTotalText;
         item.TargetLabel = primary.Label;
         item.UseRoi = primary.UseRoi;
         item.RuleMetricIndex = primary.MetricIndex;
@@ -1341,8 +1385,10 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         foreach (var option in configuredOptions.Skip(1))
         {
-            var rule = new RulePreviewViewModel(option.Label, DetectionEditor.Model)
+            var rule = new RulePreviewViewModel(option.Label, DetectionEditor.Model, option.RuleId, option.ModelBindingId)
             {
+                Scope = option.Scope,
+                ExpectedTotalText = option.ExpectedTotalText,
                 MetricIndex = option.MetricIndex,
                 RuleMethodIndex = option.RuleMethodIndex,
                 ThresholdText = option.ThresholdText,
@@ -1350,6 +1396,11 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 ConfidenceText = option.ConfidenceText,
                 OutcomeIndex = option.OutcomeIndex
             };
+            rule.PropertyChanged += ConfigurationPropertyChanged;
+            item.AdditionalRules.Add(rule);
+        }
+        foreach (var rule in otherModelRules)
+        {
             rule.PropertyChanged += ConfigurationPropertyChanged;
             item.AdditionalRules.Add(rule);
         }
@@ -1614,8 +1665,13 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         }
 
         var useRoi = DetectionEditor.ActiveLabel?.UseRoi == true;
-        DetectionLabelRegionColumn.Width = new GridLength(useRoi ? 3 : 2, GridUnitType.Star);
-        DetectionLabelRuleColumn.Width = new GridLength(useRoi ? 2 : 3, GridUnitType.Star);
+        DetectionLabelEditorCard.MaxWidth = useRoi ? 1140 : 760;
+        DetectionLabelEditorCard.MaxHeight = useRoi ? 760 : 620;
+        DetectionLabelEditorCard.VerticalAlignment = useRoi ? VerticalAlignment.Stretch : VerticalAlignment.Center;
+        DetectionLabelRegionViewer.Visibility = useRoi ? Visibility.Visible : Visibility.Collapsed;
+        DetectionLabelRegionColumn.Width = useRoi ? new GridLength(3, GridUnitType.Star) : new GridLength(0);
+        DetectionLabelGapColumn.Width = new GridLength(useRoi ? 16 : 0);
+        DetectionLabelRuleColumn.Width = new GridLength(2, GridUnitType.Star);
     }
 
     private void UpdateRuleEditorState()
@@ -2352,7 +2408,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                     return true;
                 }
 
-                if (item.UseRoi && item.RoiBackgroundImage is null)
+                if (item.UseRoi && item.RoiBackgroundImage is null && item.PrimaryScope?.Regions.Count is not > 0)
                 {
                     invalidItem = item;
                     invalidStageIndex = 0;
@@ -2372,6 +2428,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                                       item.RuleMetricIndex is >= 0 and <= 2 &&
                                       item.RuleOutcomeIndex is >= 0 and <= 1 &&
                                       IsNonNegativeInteger(item.ExpectedCountText) &&
+                                      (item.RuleMetricIndex != 1 || IsNonNegativeInteger(item.ExpectedTotalText)) &&
                                       IsConfidence(item.ConfidenceThresholdText);
                 if (targetRuleReady && item.RuleMethodIndex == 1)
                 {
@@ -2395,6 +2452,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                     rule.RuleMethodIndex is < 0 or > 6 ||
                     rule.OutcomeIndex is < 0 or > 1 ||
                     !IsNonNegativeInteger(rule.ThresholdText) ||
+                    (rule.MetricIndex == 1 && !IsNonNegativeInteger(rule.ExpectedTotalText)) ||
                     !IsConfidence(rule.ConfidenceText) ||
                     (rule.RuleMethodIndex == 1 &&
                      (!IsNonNegativeInteger(rule.UpperThresholdText) ||
@@ -3052,8 +3110,10 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
 
         public Guid StepId { get; }
         public Guid InvocationId { get; }
-        public Guid ModelBindingId { get; }
-        public Guid PrimaryRuleId { get; }
+        public Guid ModelBindingId { get; set; }
+        public Guid PrimaryRuleId { get; set; }
+        public RegionScopeDefinitionV2? PrimaryScope { get; set; }
+        public string ExpectedTotalText { get; set; } = "1";
         public Guid RoiId { get; }
         public Guid ExternalTriggerBindingId { get; }
         public string FunctionCode => _functionCode;
@@ -4055,6 +4115,13 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             }
         }
 
+        private string _expectedTotalText = "1";
+        public string ExpectedTotalText
+        {
+            get => _expectedTotalText;
+            set { if (SetProperty(ref _expectedTotalText, value)) OnPropertyChanged(nameof(RuleSummary)); }
+        }
+
         public int SelectedLabelCount => LabelOptions.Count(option => option.IsConfigured);
 
         public string SelectedLabelSummary => SelectedLabelCount == 0
@@ -4067,7 +4134,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             {
                 var metric = MetricIndex switch
                 {
-                    1 => "缺失数量",
+                    1 => $"缺失数量（应有 {ExpectedTotalText}）",
                     2 => "是否存在",
                     _ => "识别数量"
                 };
@@ -4093,6 +4160,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             MetricIndex = item.RuleMetricIndex;
             RuleMethodIndex = item.RuleMethodIndex;
             ThresholdText = item.ExpectedCountText;
+            ExpectedTotalText = item.ExpectedTotalText;
             UpperThresholdText = item.RangeMaximumCountText;
             ConfidenceText = item.ConfidenceThresholdText;
             OutcomeIndex = item.RuleOutcomeIndex;
@@ -4105,6 +4173,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             MetricIndex = option.MetricIndex;
             RuleMethodIndex = option.RuleMethodIndex;
             ThresholdText = option.ThresholdText;
+            ExpectedTotalText = option.ExpectedTotalText;
             UpperThresholdText = option.UpperThresholdText;
             ConfidenceText = option.ConfidenceText;
             OutcomeIndex = option.OutcomeIndex;
@@ -4120,6 +4189,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             option.MetricIndex = MetricIndex;
             option.RuleMethodIndex = RuleMethodIndex;
             option.ThresholdText = ThresholdText;
+            option.ExpectedTotalText = ExpectedTotalText;
             option.UpperThresholdText = UpperThresholdText;
             option.ConfidenceText = ConfidenceText;
             option.OutcomeIndex = OutcomeIndex;
@@ -4166,11 +4236,16 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             {
                 var child = existing.GetValueOrDefault(label);
                 var additionalRule = item.AdditionalRules.FirstOrDefault(rule =>
+                    rule.Model.ModelArtifactId == item.Model.ModelArtifactId &&
                     string.Equals(rule.TargetLabel, label, StringComparison.Ordinal));
                 var option = new DetectionLabelOptionPreview(label)
                 {
                     IsConfigured = child is not null,
-                    UseRoi = child?.ScopeSummary.StartsWith("ROI", StringComparison.Ordinal) == true,
+                    RuleId = additionalRule?.RuleId ?? (label == item.TargetLabel ? item.PrimaryRuleId : Guid.NewGuid()),
+                    ModelBindingId = additionalRule?.ModelBindingId ?? (label == item.TargetLabel ? item.ModelBindingId : Guid.NewGuid()),
+                    Scope = additionalRule?.Scope ?? (label == item.TargetLabel ? V2DraftMapper.GetPrimaryScope(item) : new()),
+                    ExpectedTotalText = additionalRule?.ExpectedTotalText ?? item.ExpectedTotalText,
+                    UseRoi = child is not null && (additionalRule?.Scope ?? V2DraftMapper.GetPrimaryScope(item)).Type == RegionScopeTypeV2.Roi,
                     MetricIndex = additionalRule?.MetricIndex ?? item.RuleMetricIndex,
                     RuleMethodIndex = additionalRule?.RuleMethodIndex ?? item.RuleMethodIndex,
                     ThresholdText = additionalRule?.ThresholdText ?? item.ExpectedCountText,
@@ -4182,7 +4257,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
                 {
                     option.RoiOptions.Add(new RoiSelectionOptionPreview(roi.Name)
                     {
-                        IsSelected = child?.ScopeSummary.Contains(roi.Name, StringComparison.Ordinal) == true
+                        IsSelected = option.UseRoi
                     });
                 }
 
@@ -4210,6 +4285,10 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
         }
 
         public string Label { get; }
+        public Guid RuleId { get; set; } = Guid.NewGuid();
+        public Guid ModelBindingId { get; set; } = Guid.NewGuid();
+        public RegionScopeDefinitionV2 Scope { get; set; } = new();
+        public string ExpectedTotalText { get; set; } = "1";
         public ObservableCollection<RoiSelectionOptionPreview> RoiOptions { get; } = [];
 
         public bool IsConfigured
@@ -4348,7 +4427,7 @@ public partial class TestSequenceWizardV2Window : Window, INotifyPropertyChanged
             {
                 var metric = MetricIndex switch
                 {
-                    1 => "缺失数量",
+                    1 => $"缺失数量（应有 {ExpectedTotalText}）",
                     2 => "是否存在",
                     _ => "识别数量"
                 };

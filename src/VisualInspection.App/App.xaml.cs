@@ -222,9 +222,11 @@ public partial class App : Application
                 return;
             }
 
-            if (e.Args.Contains("--ui-construction-smoke", StringComparer.OrdinalIgnoreCase))
+            if (e.Args.Contains("--ui-construction-smoke", StringComparer.OrdinalIgnoreCase) ||
+                e.Args.Contains("--ui-layout-review", StringComparer.OrdinalIgnoreCase))
             {
-                Shutdown(await UiConstructionSmokeRunner.RunAsync());
+                Shutdown(await UiConstructionSmokeRunner.RunAsync(captureLayoutReview:
+                    e.Args.Contains("--ui-layout-review", StringComparer.OrdinalIgnoreCase)));
                 return;
             }
 

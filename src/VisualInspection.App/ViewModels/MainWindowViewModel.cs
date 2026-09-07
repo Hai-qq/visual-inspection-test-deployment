@@ -110,7 +110,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _currentRuleCombinationText = FormatRuleCombination(firstItem);
         _currentExecutionDetails = FormatExecutionDetails(firstItem);
         UpdateRoi(firstItem);
-        if (bootstrap.PreviewFrame is not null)
+        if (bootstrap.Project.IsUserConfigured && bootstrap.PreviewFrame is not null)
         {
             _currentFrame = bootstrap.PreviewFrame;
             _currentImage = CreateAnnotatedImageSource(bootstrap.PreviewFrame, firstItem, []);
@@ -223,8 +223,15 @@ public sealed class MainWindowViewModel : ObservableObject
     public ImageSource? CurrentImage
     {
         get => _currentImage;
-        private set => SetProperty(ref _currentImage, value);
+        private set
+        {
+            if (SetProperty(ref _currentImage, value)) OnPropertyChanged(nameof(ImageStatusLabel));
+        }
     }
+
+    public string ImageStatusLabel => CurrentImage is null ? "等待导入图像" :
+        $"{(RuntimeStatus.StartsWith("真实 ONNX", StringComparison.Ordinal) ? "ONNX 推理" : IsRuntimeReady ? "验收数据" : "运行未就绪")} · " +
+        (CurrentImage is BitmapSource bitmap ? $"{bitmap.PixelWidth} × {bitmap.PixelHeight}" : "无图像");
 
     public bool IsRoiVisible
     {
@@ -759,8 +766,11 @@ public sealed class MainWindowViewModel : ObservableObject
         using (var context = drawing.RenderOpen())
         {
             context.DrawImage(source, new Rect(0, 0, source.PixelWidth, source.PixelHeight));
-            DrawRegions(context, item, source.PixelWidth, source.PixelHeight);
-            DrawDetections(context, item, detections, frame, source.PixelWidth, source.PixelHeight);
+            var occupiedLabels = new List<Rect>();
+            var labelDrawings = new List<Action>();
+            DrawRegions(context, item, source.PixelWidth, source.PixelHeight, occupiedLabels, labelDrawings);
+            DrawDetections(context, item, detections, frame, source.PixelWidth, source.PixelHeight, occupiedLabels, labelDrawings);
+            foreach (var drawLabel in labelDrawings) drawLabel();
         }
 
         var rendered = new RenderTargetBitmap(
@@ -778,7 +788,9 @@ public sealed class MainWindowViewModel : ObservableObject
         DrawingContext context,
         TestItemDefinition item,
         int imageWidth,
-        int imageHeight)
+        int imageHeight,
+        List<Rect> occupiedLabels,
+        List<Action> labelDrawings)
     {
         var overlayScale = GetOverlayScale(imageWidth, imageHeight);
         var roiPen = new Pen(
@@ -799,7 +811,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 (region.X2 - region.X1) * scaleX,
                 (region.Y2 - region.Y1) * scaleY);
             context.DrawRectangle(null, roiPen, rectangle);
-            DrawOverlayLabel(
+            labelDrawings.Add(() => DrawOverlayLabel(
                 context,
                 $"ROI · {region.Name}",
                 rectangle.Left,
@@ -807,7 +819,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 Color.FromRgb(0, 112, 74),
                 imageWidth,
                 imageHeight,
-                RoiLabelFontSize * overlayScale);
+                RoiLabelFontSize * overlayScale, occupiedLabels));
         }
     }
 
@@ -817,7 +829,9 @@ public sealed class MainWindowViewModel : ObservableObject
         IReadOnlyList<TargetDetection> detections,
         ImageFrame frame,
         int imageWidth,
-        int imageHeight)
+        int imageHeight,
+        List<Rect> occupiedLabels,
+        List<Action> labelDrawings)
     {
         var failTargets = item.Rules
             .Where(rule => rule.OutcomeWhenMatched == InspectionVerdict.Fail)
@@ -844,7 +858,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 (detection.X2 - detection.X1) * scaleX,
                 (detection.Y2 - detection.Y1) * scaleY);
             context.DrawRectangle(null, pen, rectangle);
-            DrawOverlayLabel(
+            labelDrawings.Add(() => DrawOverlayLabel(
                 context,
                 ResolveDetectionOverlayLabel(_project, detection.ModelBindingId),
                 rectangle.Left,
@@ -852,7 +866,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 color,
                 imageWidth,
                 imageHeight,
-                DetectionLabelFontSize * overlayScale);
+                DetectionLabelFontSize * overlayScale, occupiedLabels));
         }
     }
 
@@ -900,7 +914,8 @@ public sealed class MainWindowViewModel : ObservableObject
         Color color,
         int imageWidth,
         int imageHeight,
-        double fontSize)
+        double fontSize,
+        List<Rect> occupiedLabels)
     {
         var formatted = new FormattedText(
             text,
@@ -916,17 +931,43 @@ public sealed class MainWindowViewModel : ObservableObject
             1);
         var horizontalPadding = fontSize * 0.45;
         var verticalPadding = fontSize * 0.24;
-        var labelWidth = formatted.Width + (horizontalPadding * 2);
+        formatted.MaxTextWidth = Math.Max(1, imageWidth - horizontalPadding * 2);
+        formatted.MaxLineCount = 1;
+        formatted.Trimming = TextTrimming.CharacterEllipsis;
+        var labelWidth = Math.Min(imageWidth, formatted.Width + (horizontalPadding * 2));
         var labelHeight = formatted.Height + (verticalPadding * 2);
-        var boundedLeft = Math.Clamp(left, 0, Math.Max(0, imageWidth - labelWidth));
-        var top = Math.Clamp(anchorY - labelHeight, 0, Math.Max(0, imageHeight - labelHeight));
+        var bounds = PlaceOverlayLabel(left, anchorY, labelWidth, labelHeight, imageWidth, imageHeight, occupiedLabels);
+        occupiedLabels.Add(bounds);
+        if (Math.Abs(bounds.Top - (anchorY - labelHeight)) > labelHeight)
+            context.DrawLine(new Pen(new SolidColorBrush(color), Math.Max(1, fontSize / 12)),
+                new Point(left, anchorY), new Point(bounds.Left, bounds.Bottom));
         context.DrawRectangle(
             new SolidColorBrush(Color.FromArgb(235, color.R, color.G, color.B)),
             null,
-            new Rect(boundedLeft, top, labelWidth, labelHeight));
+            bounds);
         context.DrawText(
             formatted,
-            new Point(boundedLeft + horizontalPadding, top + verticalPadding));
+            new Point(bounds.Left + horizontalPadding, bounds.Top + verticalPadding));
+    }
+
+    internal static Rect PlaceOverlayLabel(double left, double anchorY, double width, double height,
+        int imageWidth, int imageHeight, IReadOnlyList<Rect> occupied)
+    {
+        width = Math.Min(width, imageWidth);
+        height = Math.Min(height, imageHeight);
+        var preferred = new Rect(Math.Clamp(left, 0, imageWidth - width),
+            Math.Clamp(anchorY - height, 0, imageHeight - height), width, height);
+        if (!occupied.Any(value => value.IntersectsWith(preferred))) return preferred;
+        var candidates = new List<Rect>();
+        for (double y = 0; y <= imageHeight - height; y += height + 2)
+        {
+            candidates.Add(new Rect(preferred.Left, y, width, height));
+            for (double x = 0; x <= imageWidth - width; x += width + 2)
+                candidates.Add(new Rect(x, y, width, height));
+        }
+        return candidates.Where(candidate => !occupied.Any(value => value.IntersectsWith(candidate)))
+            .OrderBy(candidate => Math.Abs(candidate.Top - preferred.Top) + Math.Abs(candidate.Left - preferred.Left))
+            .FirstOrDefault(preferred);
     }
 
     private static ExecutionState ToExecutionState(InspectionVerdict? verdict) => verdict switch

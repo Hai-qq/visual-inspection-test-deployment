@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="选择模型" Width="520" Height="430"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        Background="#F4F6F5" ShowInTaskbar="False">
+        Background="#F4F6F5" FontSize="13" ShowInTaskbar="False" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <Grid Margin="22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -13,12 +13,17 @@
 
         <StackPanel ToolTip="这里只显示与当前检测类型兼容的模型；确认后再进入对应的检测标签或动作设置。">
             <TextBlock Text="为当前测试步选择模型" FontSize="19" FontWeight="SemiBold" Foreground="#26302A" />
-            <TextBlock Text="ⓘ" FontSize="12" Foreground="#2B7A3D" Margin="0,6,0,0" />
+            <TextBlock Text="可用的兼容模型" FontSize="13" Foreground="#667078" Margin="0,6,0,0" />
         </StackPanel>
 
         <ListBox x:Name="ModelsList" Grid.Row="1" Margin="0,18,0,18"
                  BorderBrush="#CDD4CF" BorderThickness="1" Background="White"
-                 DisplayMemberPath="Name" MouseDoubleClick="ModelsList_MouseDoubleClick" />
+                 HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 MouseDoubleClick="ModelsList_MouseDoubleClick">
+            <ListBox.ItemTemplate><DataTemplate>
+                <TextBlock Text="{Binding Name}" FontSize="14" TextWrapping="Wrap" Padding="8,10" />
+            </DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="取消" Width="88" Height="34" Margin="0,0,10,0" IsCancel="True" />

@@ -1,4 +1,5 @@
 using VisualInspection.App.ViewModels;
+using VisualInspection.Core.V2.Configuration;
 
 namespace VisualInspection.App.ViewModels.V2;
 
@@ -27,6 +28,8 @@ public sealed class RulePreviewViewModel : ObservableObject
 
     public Guid RuleId { get; }
     public Guid ModelBindingId { get; }
+    public RegionScopeDefinitionV2 Scope { get; set; } = new();
+    public string ExpectedTotalText { get; set; } = "1";
 
     public TestSequenceWizardV2Window.ModelPreview Model
     {
