@@ -23,7 +23,8 @@ public static class V2DraftMapper
         }).ToList();
         var artifacts = editor.Models.Select(ToArtifact).ToList();
         var steps = editor.InspectionItems.Select(ToStep).ToList();
-        var sourceKind = editor.SourceKindIndex is 0 or 3 ? InputSourceKind.Folder : InputSourceKind.Camera;
+        var sourceKind = editor.SourceKindIndex == 3 ? InputSourceKind.VideoFolder :
+            editor.SourceKindIndex == 0 ? InputSourceKind.Folder : InputSourceKind.Camera;
         var source = new InputSourceDefinitionV2
         {
             InputSourceId = editor.InputSourceId,
@@ -158,6 +159,13 @@ public static class V2DraftMapper
                     : ToCapturePolicyIndex(invocation.CapturePolicy)
             };
             ApplyTrigger(item, step.InvocationPolicy.ExternalTriggerBindings.FirstOrDefault());
+            if (step.CustomFunction is { } function)
+            {
+                item.CustomFunctionTypeIndex = (int)function.Kind;
+                item.CustomFunctionName = function.Name;
+                item.CustomFunctionFilePath = function.FilePath;
+                item.CustomFunctionDescription = function.Description;
+            }
             if (invocation is not null)
             {
                 item.CustomFunctionDelayMsText = invocation.DelayMs.ToString(CultureInfo.InvariantCulture);
@@ -188,7 +196,7 @@ public static class V2DraftMapper
         {
             editor.InputSourceId = source.InputSourceId;
             editor.SourceBindingId = source.SourceBindingId;
-            editor.SourceKindIndex = source.Kind == InputSourceKind.Folder
+            editor.SourceKindIndex = source.Kind == InputSourceKind.VideoFolder ? 3 : source.Kind == InputSourceKind.Folder
                 ? string.Equals(source.Name, "视频文件夹", StringComparison.Ordinal) ? 3 : 0
                 : source.Name.Contains("USB", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
         }
@@ -239,6 +247,11 @@ public static class V2DraftMapper
             ModelBindings = bindings,
             RuleSet = isPose ? null : ToRuleSet(item, bindings),
             PoseProgram = isPose ? ToPoseProgram(item, bindings) : null,
+            CustomFunction = new CustomFunctionConfiguration
+            {
+                Kind = (CustomFunctionKind)item.CustomFunctionTypeIndex, Name = item.CustomFunctionName,
+                FilePath = item.CustomFunctionFilePath, Description = item.CustomFunctionDescription
+            },
             InvocationPolicy = new InvocationPolicyDefinition
             {
                 AllowSequenceInvocation = true,
@@ -313,11 +326,8 @@ public static class V2DraftMapper
                 item.RangeMaximumCountText,
                 item.ConfidenceThresholdText,
                 item.RuleOutcomeIndex,
-                item.UseRoi,
-                item.RoiRect,
-                item.RoiId,
-                item.RoiReferenceWidth,
-                item.RoiReferenceHeight)
+                item.ExpectedTotalText,
+                GetPrimaryScope(item))
         };
         rules.AddRange(item.AdditionalRules.Select((rule, index) => CreateRule(
             rule.RuleId,
@@ -328,11 +338,8 @@ public static class V2DraftMapper
             rule.UpperThresholdText,
             rule.ConfidenceText,
             rule.OutcomeIndex,
-            item.UseRoi,
-            item.RoiRect,
-            item.RoiId,
-            item.RoiReferenceWidth,
-            item.RoiReferenceHeight)));
+            rule.ExpectedTotalText,
+            rule.Scope)));
         return new RuleSetDefinition
         {
             LogicalOperator = item.RuleLogicalOperatorIndex == 1 ? RuleLogicalOperatorV2.Or : RuleLogicalOperatorV2.And,
@@ -349,11 +356,8 @@ public static class V2DraftMapper
         string upperText,
         string confidenceText,
         int outcomeIndex,
-        bool useRoi,
-        Rect roi,
-        Guid roiId,
-        double roiReferenceWidth,
-        double roiReferenceHeight) => new()
+        string expectedTotalText,
+        RegionScopeDefinitionV2 scope) => new()
         {
             RuleId = ruleId,
             ModelBindingId = binding.ModelBindingId,
@@ -376,29 +380,24 @@ public static class V2DraftMapper
             },
             Threshold = ParseNonNegativeInt(thresholdText),
             UpperThreshold = methodIndex == 1 ? ParseNonNegativeInt(upperText) : null,
-            ExpectedCount = metricIndex == 1 ? ParseNonNegativeInt(thresholdText) : null,
+            ExpectedCount = metricIndex == 1 ? ParseNonNegativeInt(expectedTotalText) : null,
             ConfidenceThreshold = ParseConfidence(confidenceText),
             OutcomeWhenMatched = outcomeIndex == 1 ? RuleOutcome.Fail : RuleOutcome.Pass,
-            Scope = new RegionScopeDefinitionV2
+            Scope = scope
+        };
+
+    public static RegionScopeDefinitionV2 GetPrimaryScope(TestSequenceWizardV2Window.InspectionItemPreview item) =>
+        item.PrimaryScope ?? new RegionScopeDefinitionV2
+        {
+            Type = item.UseRoi ? RegionScopeTypeV2.Roi : RegionScopeTypeV2.FullImage,
+            Regions = item.UseRoi ? [new RegionOfInterestV2
             {
-                Type = useRoi ? RegionScopeTypeV2.Roi : RegionScopeTypeV2.FullImage,
-                Regions = useRoi
-                ?
-                [
-                    new RegionOfInterestV2
-                    {
-                        RegionId = roiId,
-                        Name = "主 ROI",
-                        X1 = (int)Math.Round(roi.X),
-                        Y1 = (int)Math.Round(roi.Y),
-                        X2 = (int)Math.Round(roi.Right),
-                        Y2 = (int)Math.Round(roi.Bottom),
-                        ReferenceWidth = Math.Max(1, (int)Math.Round(roiReferenceWidth)),
-                        ReferenceHeight = Math.Max(1, (int)Math.Round(roiReferenceHeight))
-                    }
-                ]
-                : []
-            }
+                RegionId = item.RoiId, Name = "ROI",
+                X1 = (int)Math.Round(item.RoiRect.Left), Y1 = (int)Math.Round(item.RoiRect.Top),
+                X2 = (int)Math.Round(item.RoiRect.Right), Y2 = (int)Math.Round(item.RoiRect.Bottom),
+                ReferenceWidth = Math.Max(1, (int)Math.Round(item.RoiReferenceWidth)),
+                ReferenceHeight = Math.Max(1, (int)Math.Round(item.RoiReferenceHeight))
+            }] : []
         };
 
     private static PoseProgramDefinition ToPoseProgram(
@@ -515,6 +514,8 @@ public static class V2DraftMapper
         IReadOnlyList<ModelBindingV2> bindings,
         IReadOnlyDictionary<Guid, TestSequenceWizardV2Window.ModelPreview> modelById)
     {
+        item.DetectionChildren.Clear();
+        item.AdditionalRules.Clear();
         item.RuleLogicalOperatorIndex = ruleSet.LogicalOperator == RuleLogicalOperatorV2.Or ? 1 : 0;
         for (var index = 0; index < ruleSet.Rules.Count; index++)
         {
@@ -524,13 +525,29 @@ public static class V2DraftMapper
                 ? selectedModel
                 : item.Model;
             var target = model.ResolveLabelName(rule.OutputLabelId) ?? string.Empty;
+            var preview = new TestSequenceWizardV2Window.DetectionLabelOptionPreview(target)
+            {
+                MetricIndex = ToRuleMetricIndex(rule.Metric),
+                RuleMethodIndex = ToRuleMethodIndex(rule.Operator),
+                ThresholdText = rule.Threshold.ToString(CultureInfo.InvariantCulture),
+                ExpectedTotalText = rule.ExpectedCount?.ToString(CultureInfo.InvariantCulture) ?? "1",
+                UpperThresholdText = (rule.UpperThreshold ?? rule.Threshold).ToString(CultureInfo.InvariantCulture),
+                ConfidenceText = rule.ConfidenceThreshold.ToString(CultureInfo.InvariantCulture),
+                OutcomeIndex = rule.OutcomeWhenMatched == RuleOutcome.Fail ? 1 : 0
+            };
+            item.DetectionChildren.Add(new TestSequenceWizardV2Window.DetectionChildPreview(target,
+                rule.Scope.Type == RegionScopeTypeV2.Roi ? "ROI" : "整张图", preview.RuleSummary));
             if (index == 0)
             {
+                item.PrimaryRuleId = rule.RuleId;
+                item.ModelBindingId = rule.ModelBindingId;
                 item.Model = model;
                 item.TargetLabel = target;
                 item.RuleMetricIndex = ToRuleMetricIndex(rule.Metric);
                 item.RuleMethodIndex = ToRuleMethodIndex(rule.Operator);
                 item.ExpectedCountText = rule.Threshold.ToString(CultureInfo.InvariantCulture);
+                item.ExpectedTotalText = rule.ExpectedCount?.ToString(CultureInfo.InvariantCulture) ?? "1";
+                item.PrimaryScope = rule.Scope;
                 item.RangeMaximumCountText = (rule.UpperThreshold ?? rule.Threshold).ToString(CultureInfo.InvariantCulture);
                 item.ConfidenceThresholdText = rule.ConfidenceThreshold.ToString("0.##", CultureInfo.InvariantCulture);
                 item.RuleOutcomeIndex = rule.OutcomeWhenMatched == RuleOutcome.Fail ? 1 : 0;
@@ -540,6 +557,8 @@ public static class V2DraftMapper
 
             item.AdditionalRules.Add(new RulePreviewViewModel(target, model, rule.RuleId, rule.ModelBindingId)
             {
+                Scope = rule.Scope,
+                ExpectedTotalText = rule.ExpectedCount?.ToString(CultureInfo.InvariantCulture) ?? "1",
                 MetricIndex = ToRuleMetricIndex(rule.Metric),
                 RuleMethodIndex = ToRuleMethodIndex(rule.Operator),
                 ThresholdText = rule.Threshold.ToString(CultureInfo.InvariantCulture),

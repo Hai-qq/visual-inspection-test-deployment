@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="VisualInspection.App.Tests" />
     <ProjectReference Include="..\VisualInspection.Core\VisualInspection.Core.csproj" />
     <ProjectReference Include="..\VisualInspection.Infrastructure\VisualInspection.Infrastructure.csproj" />
   </ItemGroup>

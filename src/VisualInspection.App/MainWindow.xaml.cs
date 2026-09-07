@@ -45,7 +45,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var imported = await ApplicationBootstrapper.LoadPortableSequenceAsync(dialog.FileName);
+            var imported = await ApplicationBootstrapper.LoadPortableSequenceAsync(dialog.FileName, persist: true);
             var replacement = new MainWindow(
                 new MainWindowViewModel(imported, _session),
                 imported,

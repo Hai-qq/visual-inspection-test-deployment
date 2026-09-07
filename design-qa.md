@@ -227,3 +227,73 @@ The source-selection region keeps Image Folder and Video Folder mutually exclusi
 - [P3] Revisit small-caption contrast only after the formal Schneider token and target monitor specification are supplied.
 
 final result: passed for the approved frontend v0.2 scope; backend/runtime items above remain pending
+
+## Pass 18 — Configuration round-trip fixes (2026-09-07)
+
+This pass supersedes the earlier frontend-only persistence claims for the affected paths.
+
+- Existing Fan projects populate all six labels and real thresholds. Saving one label preserves the other rules and stable rule/binding IDs.
+- Full-image and ROI scopes, coordinates and reference sizes belong to each rule. Window smoke verifies a saved secondary ROI survives editing the primary full-image rule.
+- MissingCount has a separate expected total and comparison threshold; the editor scrolls when the additional fields exceed the available height.
+- Custom-function metadata survives portable export, the operator compatibility format and reopening. The UI states that functions are not executed; step delay remains active.
+- Interactive imports persist and startup selects the most recently saved project. Imported/applied user configurations bypass demo refresh. Read-only verification and failed imports preserve the saved project.
+- Video folders have a distinct source kind and both current and legacy video drafts are rejected by the operator.
+- Runtime labels use actual image dimensions and runtime state. Status messages occupy separate columns; labels avoid collisions and render after detection boxes.
+
+Validation: Release solution build passed; 200 tests passed (85 Core, 88 V2, 27 App); WPF construction smoke passed with six-rule re-edit, MissingCount and independent-ROI assertions. Actual WPF screenshots were inspected for six configured labels, dense overlay text, expected-total fields and scrolling. The build reported NU1900 because NuGet vulnerability metadata was unavailable. Original local project JSON hash remained unchanged.
+
+Evidence: `artifacts/audit-20260907/fix-build.log`, `fix-tests.log`, `fix-test-results/`, `fix-ui-construction-smoke.txt`, and `fix-screenshots/`. The earlier read-only audit is retained as pre-fix evidence. Hardware adapters and custom-function execution remain outside this repair.
+
+## Pass 19 — Image-first operator layout (2026-09-07)
+
+- Detection image is the main workspace. Sidebars are 180/200 px; the detail area is reduced from 292 to 174 px, with six rules arranged in two columns and three rows.
+- Session counts share one chart, switching between count distribution and qualification rate. Runtime logs are collapsed by default and expand on demand.
+- Release solution build and 200 tests passed in the isolated `artifacts/audit-20260907/image-main-preview/` output. WPF smoke checks both 1440×900 and 1120×720: six rules fit without scrolling, the displayed image is at least 440/300 px high respectively, and log expansion works.
+- Final screenshot review remains pending because the Windows desktop was locked. These checks establish layout measurements, not final visual approval. Earlier homepage screenshots predate this image-first adjustment.
+- Evidence: `artifacts/audit-20260907/image-main-build.log`, `image-main-tests.log`, `image-main-smoke.txt`. NU1900 vulnerability-metadata warnings remain; no inference or hardware capability claim is added.
+
+## Pass 20 — Grid empty state and settings screenshot review (2026-09-07)
+
+- Default operator preview shows a neutral grid with no preloaded sample illustration. User-configured/imported sources retain their actual preview frame; smoke verifies both branches.
+- Sidebars increased to 210/240 px while retaining the image-first layout and compact rule details.
+- Reviewed actual screenshots of all five wizard stages and the custom-function form. Reduced oversized navigation/title bands, changed fixed-width bodies to available-width layouts, reduced model/test lists to 300 px and removed redundant custom-function headings/summary. The final function form fits at default size.
+- Release solution build, 200 tests, and WPF smoke passed. The smoke checks operator layout at 1440×900 and 1120×720; visual review used the default-size live windows. Build completed with NU1900 metadata warnings and transient MSB3026 copy retries.
+- Evidence: `artifacts/audit-20260907/settings-layout-build.log`, `settings-layout-tests.log`, `settings-layout-smoke.txt`, and `settings-layout-screenshots/`. Final isolated runnable output is `settings-final-preview/`; older running Debug/Release previews are not the latest build.
+
+## Pass 21 — Test-step layout and modal boundary repair (2026-09-07)
+
+This pass supersedes Pass 20 for the test-step layout and runnable output. Standard Debug and Release outputs have both been rebuilt.
+
+- Before screenshots confirmed crowded basic fields, a clipped sixth label, an oversized empty area for full-image rules, and a fixed-width rule modal clipped by the minimum window.
+- Test-step navigation is 268 px wide. Name/type fields share a row; model binding occupies its own row. Labels use a single header and independently scroll. All six rules fit at the default 1380×860 window; at 1120×720 the last rule and its actions remain fully reachable by scrolling.
+- Buttons now apply their declared padding. Form text is 13 px and supporting text is at least 12 px. Long step titles are bounded; model counts and add/remove buttons have separate rows.
+- Full-image rules use a compact two-column modal. ROI mode expands the drawing area with available height. Modal widths follow the window, confidence inputs remain 160 px wide, and the save/cancel footer stays separate from scrolling fields.
+- Actual final WPF screenshots were reviewed at default size and 1120×720, including ROI controls, label selection, the final rule, model list, and the whole-image rule form. The review missed the one-pixel navigation-card clipping subsequently reported by the user and corrected in Pass 22.
+- Added layout smoke assertions for modal/footer containment, button padding, confidence width, ROI canvas/control containment, MissingCount/range fields, six default rows and minimum-window last-row access.
+
+Validation: Debug and Release solution builds passed with 0 errors and 3 NU1900 warnings each (NuGet vulnerability metadata unavailable). All 200 tests passed (85 Core, 88 V2, 27 App). Final WPF smoke passed after the final ROI height adjustment. The original saved project JSON remained unchanged; preview edits were canceled.
+
+Evidence: `artifacts/audit-20260907/deep-layout-build.log`, `deep-layout-debug-build.log`, `deep-layout-tests.log`, `deep-layout-smoke.txt`, and `deep-layout-screenshots/`. This is UI/configuration validation; it adds no model-inference or hardware qualification claim. README and the UI design document were synchronized in the scoped neat-freak closeout.
+
+## Pass 22 — Navigation card bottom-edge clipping (2026-09-07)
+
+- User review identified clipped lower borders on steps 01–05. The 84 px row minus 20 px vertical margins and a 1 px separator left a 63 px viewport for 64 px buttons.
+- Reduced vertical margins to 8 px and centered the content, retaining the existing row height and editor space. Default-window screenshots now show all five complete lower borders and corners.
+- Added smoke assertions that each actual navigation button fits within the viewport with spare vertical space at both 1380×860 and 1120×720. Assertions inspect the button, not its stretched item container.
+- Debug/Release builds, 200 tests and final WPF smoke passed. Evidence: `artifacts/audit-20260907/nav-edge-build.log`, `nav-edge-debug-build.log`, `nav-edge-tests.log`, `nav-edge-smoke.txt`, and `deep-layout-screenshots/nav-edge-fixed.png`. Scoped documentation sync completed; README behavior did not change.
+
+## Pass 23 — Full current-interface review (2026-09-07)
+
+This pass supersedes Pass 22 for navigation geometry and is the current visual baseline. Previous failed screenshots and audit findings remain preserved.
+
+- Reviewed the current login, operator workspace, count/rate and log states, all five settings pages, custom functions, model selection, serial entry, label selection/editing, ROI, MissingCount/range and pose actions. Saved 36 WPF renders at default/minimum sizes and seven final native screenshots through the operator-to-settings route. Legacy compatibility windows remain construction-tested rather than current navigation entries.
+- Navigation now measures its content naturally (minimum row 88 px), retains 64 px cards and spare vertical viewport, uses pixel rounding, and strengthens inactive borders. Native screenshots show all five bottom edges and corners.
+- Model and test-step lists are 268 px. Six common English labels fit without clipping or scrolling in the minimum model editor. The function step selector shares the form header, allowing all default fields to fit at minimum size.
+- Pose editing is a window-level overlay rather than a clipped body panel. Parameters and save controls fit both sizes. Fixed a functional defect where selection became -1 during step switching and left the parameter form blank; reopening restores a valid selection and preserves an existing choice.
+- Operator statistics scale only the chart to available height; captions remain readable and both count/rate states fit at 1120×720. Footer messages and export summaries wrap in separate layout rows/columns.
+- Login, serial entry and model selection use readable supporting text and actual button padding. Video and pose configuration explicitly show their pending runtime status; custom functions remain metadata-only.
+- Added `--ui-layout-review` for repeatable local WPF evidence. Fixtures are unsaved review states, not inference results; MissingCount/range stress states include unsubmitted invalid inputs and do not bypass save validation.
+
+Validation after final code changes: Debug and Release solution builds passed with 0 errors and 3 NU1900 warnings each (unavailable vulnerability metadata); all 200 tests passed (85 Core, 88 V2, 27 App); final WPF construction/interaction/layout smoke passed at 2026-09-07T13:05:18Z. Original saved project SHA-256 matched the pre-audit backup. No configuration was applied/exported during this visual pass.
+
+Evidence retained locally: `artifacts/audit-20260907/full-review-build.log`, `full-review-debug-build.log`, `full-review-tests.log`, `full-review-smoke.txt`, `full-review-project-verification.json`, `full-review-renders/`, `full-review-native/`, and `整体界面复查.md`. Scoped neat-freak sync updated README, UI design and acceptance instructions. Existing hardware/runtime limitations remain unchanged. Review renders are reproducible with `--ui-layout-review`; local artifacts are excluded from Git. GitHub publication is tracked by repository commit history.

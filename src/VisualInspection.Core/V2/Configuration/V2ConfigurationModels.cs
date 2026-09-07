@@ -55,7 +55,8 @@ public enum InputSourceKind
 {
     Folder,
     Camera,
-    ExternalContext
+    ExternalContext,
+    VideoFolder
 }
 
 public enum FrameInputPolicy
@@ -198,6 +199,17 @@ public sealed record InputSourceDefinitionV2
     public int MaximumFrameAgeMs { get; init; } = 1000;
 }
 
+/// <summary>Reserved function metadata. No function execution adapter is installed.</summary>
+public enum CustomFunctionKind { PythonFile, BuiltIn, Reserved }
+
+public sealed record CustomFunctionConfiguration
+{
+    public CustomFunctionKind Kind { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public string FilePath { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+}
+
 public sealed record TestStepDefinition
 {
     public Guid StepId { get; init; } = Guid.NewGuid();
@@ -207,6 +219,7 @@ public sealed record TestStepDefinition
     public List<ModelBindingV2> ModelBindings { get; init; } = [];
     public RuleSetDefinition? RuleSet { get; init; }
     public PoseProgramDefinition? PoseProgram { get; init; }
+    public CustomFunctionConfiguration? CustomFunction { get; init; }
     public InvocationPolicyDefinition InvocationPolicy { get; init; } = new();
     public int DefaultTimeoutMs { get; init; } = 5000;
     public FrameInputPolicy DefaultFrameInputPolicy { get; init; } = FrameInputPolicy.CaptureOncePerProduct;

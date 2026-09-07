@@ -248,11 +248,87 @@ public sealed class V2DraftMapperTests
         V2DraftMapper.ApplyProject(target, project);
 
         var mappedSource = Assert.Single(project.InputSourceDefinitions);
-        Assert.Equal(InputSourceKind.Folder, mappedSource.Kind);
+        Assert.Equal(InputSourceKind.VideoFolder, mappedSource.Kind);
         Assert.Equal("视频文件夹", mappedSource.Name);
         Assert.Equal(3, target.SourceKindIndex);
         Assert.Equal("视频文件夹", target.SourceKindLabel);
         Assert.Equal(@"C:\检测视频\Fan", target.SourceAddress);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesIndependentScopesMissingBaselineAndFunctionMetadataThroughOperator()
+    {
+        var model = CreateModel("fan", 0, KnownAdapterIds.YoloEndToEndDetection, ["fan", "wire", "defect"]);
+        var item = new TestSequenceWizardV2Window.InspectionItemPreview("TS-FAN", "风扇", 0, true, model)
+        {
+            RuleMetricIndex = 1, ExpectedTotalText = "4", ExpectedCountText = "0",
+            CustomFunctionTypeIndex = 2, CustomFunctionName = "check_fan",
+            CustomFunctionFilePath = "functions/check.py", CustomFunctionDescription = "保存元数据",
+            CustomFunctionDelayMsText = "321"
+        };
+        var roi = new RegionScopeDefinitionV2
+        {
+            Type = RegionScopeTypeV2.Roi,
+            Regions = [new RegionOfInterestV2 { Name = "wireROI", X1 = 100, Y1 = 80, X2 = 300, Y2 = 200,
+                ReferenceWidth = 5712, ReferenceHeight = 4284 }]
+        };
+        item.AdditionalRules.Add(new RulePreviewViewModel("wire", model)
+        { Scope = roi, MetricIndex = 1, ExpectedTotalText = "3", ThresholdText = "1" });
+        item.AdditionalRules.Add(new RulePreviewViewModel("defect", model) { ThresholdText = "0" });
+        var editor = new TestSequenceWizardV2ViewModel([model], [item]);
+        var original = V2DraftMapper.ToProject(editor);
+        var legacy = ProjectConfigurationV2CompatibilityConverter.ToV1(original, System.IO.Path.GetTempPath());
+        var migrated = ProjectConfigurationV1Migrator.Migrate(legacy);
+        var restoredEditor = new TestSequenceWizardV2ViewModel([], []);
+        V2DraftMapper.ApplyProject(restoredEditor, migrated);
+        var restored = V2DraftMapper.ToProject(restoredEditor).TestStepCatalog.Single();
+        Assert.Equal(3, restoredEditor.InspectionItems.Single().DetectionChildren.Count);
+        Assert.Equal(original.TestStepCatalog.Single().CustomFunction, restored.CustomFunction);
+        Assert.Equal("321", restoredEditor.InspectionItems.Single().CustomFunctionDelayMsText);
+        Assert.Equal([RegionScopeTypeV2.FullImage, RegionScopeTypeV2.Roi, RegionScopeTypeV2.FullImage],
+            restored.RuleSet!.Rules.Select(rule => rule.Scope.Type));
+        Assert.Equal(roi.Regions.Single(), restored.RuleSet.Rules[1].Scope.Regions.Single());
+        Assert.Equal([4, 3, (int?)null], restored.RuleSet.Rules.Select(rule => rule.ExpectedCount));
+        Assert.Equal([0, 1, 0], restored.RuleSet.Rules.Select(rule => rule.Threshold));
+        var countRule = new VisualInspection.Core.Rules.CountRule("fan",
+            VisualInspection.Core.Rules.QuantityMetric.MissingCount,
+            VisualInspection.Core.Rules.ComparisonOperator.Equal,
+            restored.RuleSet.Rules[0].Threshold, ExpectedCount: restored.RuleSet.Rules[0].ExpectedCount);
+        Assert.Equal(VisualInspection.Core.Domain.InspectionVerdict.Fail,
+            VisualInspection.Core.Rules.CountRuleEvaluator.Evaluate(countRule, 3).Verdict);
+        Assert.Equal(VisualInspection.Core.Domain.InspectionVerdict.Pass,
+            VisualInspection.Core.Rules.CountRuleEvaluator.Evaluate(countRule, 4).Verdict);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Operator_RejectsBothCurrentAndLegacyVideoDrafts(bool legacy)
+    {
+        var model = CreateModel("fan", 0, KnownAdapterIds.YoloEndToEndDetection, ["fan"]);
+        var editor = new TestSequenceWizardV2ViewModel([model],
+            [new TestSequenceWizardV2Window.InspectionItemPreview("TS-FAN", "风扇", 0, true, model)])
+        { SourceKindIndex = 3 };
+        var project = V2DraftMapper.ToProject(editor);
+        if (legacy) project = project with
+        { InputSourceDefinitions = [project.InputSourceDefinitions.Single() with { Kind = InputSourceKind.Folder }] };
+        var exception = Assert.Throws<NotSupportedException>(() =>
+            ProjectConfigurationV2CompatibilityConverter.ToV1(project, System.IO.Path.GetTempPath()));
+        Assert.Contains("视频", exception.Message);
+    }
+
+    [Fact]
+    public void OverlayLabelPlacement_AvoidsExistingLabelsAndStaysInImage()
+    {
+        var occupied = new List<System.Windows.Rect>();
+        for (var index = 0; index < 8; index++)
+        {
+            var next = VisualInspection.App.ViewModels.MainWindowViewModel.PlaceOverlayLabel(
+                620, 0, 180, 32, 640, 360, occupied);
+            Assert.DoesNotContain(occupied, rectangle => rectangle.IntersectsWith(next));
+            Assert.True(new System.Windows.Rect(0, 0, 640, 360).Contains(next));
+            occupied.Add(next);
+        }
     }
 
     private static TestSequenceWizardV2Window.ModelPreview CreateModel(

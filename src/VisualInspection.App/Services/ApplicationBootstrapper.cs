@@ -19,12 +19,13 @@ public static class ApplicationBootstrapper
         "projects");
 
     public static async Task<ApplicationBootstrapResult> LoadOrCreateProjectAsync(
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? storageDirectory = null)
     {
         var bundledFan = await FrontendDemoAssetSeeder.EnsureAsync(cancellationToken);
         var demoDirectory = bundledFan?.ImageDirectory ?? await SampleDataSeeder.EnsureAsync(cancellationToken);
         var modelPath = bundledFan?.ModelPath;
-        IProjectConfigurationStore store = new JsonProjectConfigurationStore(ProjectStorageDirectory);
+        IProjectConfigurationStore store = new JsonProjectConfigurationStore(storageDirectory ?? ProjectStorageDirectory);
         var summaries = await store.ListAsync(cancellationToken);
         ProjectConfiguration project;
 
@@ -35,16 +36,16 @@ public static class ApplicationBootstrapper
         }
         else
         {
-            project = await store.LoadAsync(summaries[0].ProjectId, cancellationToken)
+            project = await store.LoadAsync(summaries.OrderByDescending(value => value.SavedAtUtc).First().ProjectId, cancellationToken)
                 ?? throw new InvalidDataException("所选项目配置已不存在。");
 
-            if (ShouldRestoreBuiltInSource(project))
+            if (!project.IsUserConfigured && ShouldRestoreBuiltInSource(project))
             {
                 project = ReplaceActiveFolder(project, demoDirectory);
                 await store.SaveAsync(project, cancellationToken);
             }
 
-            if (NeedsBuiltInFanRefresh(project, demoDirectory, modelPath))
+            if (!project.IsUserConfigured && NeedsBuiltInFanRefresh(project, demoDirectory, modelPath))
             {
                 project = SampleProjectFactory.Create(demoDirectory, modelPath);
                 await store.SaveAsync(project, cancellationToken);
@@ -56,17 +57,21 @@ public static class ApplicationBootstrapper
 
     public static async Task<ApplicationBootstrapResult> LoadPortableSequenceAsync(
         string sequencePath,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool persist = false,
+        string? storageDirectory = null)
     {
         var absolutePath = Path.GetFullPath(sequencePath);
         var portable = await PortableSequenceFile.LoadAsync(absolutePath, cancellationToken);
         var project = ProjectConfigurationV2CompatibilityConverter.ToV1(
             portable,
             Path.GetDirectoryName(absolutePath)!);
-        IProjectConfigurationStore store = new JsonProjectConfigurationStore(ProjectStorageDirectory);
+        IProjectConfigurationStore store = new JsonProjectConfigurationStore(storageDirectory ?? ProjectStorageDirectory);
         var source = project.InputSources.Single();
         var dataDirectory = source.Folder?.FolderPath ?? Path.GetDirectoryName(absolutePath)!;
-        return await CreateBootstrapResultAsync(project, store, dataDirectory, cancellationToken);
+        var result = await CreateBootstrapResultAsync(project, store, dataDirectory, cancellationToken);
+        if (persist) await store.SaveAsync(project, cancellationToken);
+        return result;
     }
 
     public static async Task<ApplicationBootstrapResult> LoadConfiguredSequenceAsync(

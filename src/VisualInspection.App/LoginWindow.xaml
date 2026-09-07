@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="登录 · 视觉检测测试部署系统"
         Width="920" Height="560" ResizeMode="NoResize"
-        WindowStartupLocation="CenterScreen" Background="{StaticResource CanvasBrush}">
+        WindowStartupLocation="CenterScreen" FontSize="13" UseLayoutRounding="True" SnapsToDevicePixels="True" Background="{StaticResource CanvasBrush}">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="350" />
@@ -25,11 +25,11 @@
                     <TextBlock Text="测试部署系统" FontSize="13" Foreground="#B8C7BF" Margin="0,6,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                    <TextBlock Text="角色权限" Foreground="#8FA39A" FontSize="10" FontWeight="SemiBold" />
+                    <TextBlock Text="角色权限" Foreground="#8FA39A" FontSize="12" FontWeight="SemiBold" />
                     <TextBlock Text="管理员可进入全部设置；操作员登录后直接进入测试执行与统计界面。"
                                Foreground="#E2EAE5" TextWrapping="Wrap" FontSize="13" LineHeight="22" Margin="0,10,0,0" />
                 </StackPanel>
-                <TextBlock Grid.Row="2" Text="Visual Inspection Test Deployment" Foreground="#70857B" FontSize="9" />
+                <TextBlock Grid.Row="2" Text="Visual Inspection Test Deployment" Foreground="#70857B" FontSize="12" />
             </Grid>
         </Border>
 
@@ -61,16 +61,15 @@
                 <Border Background="#FFF9EA" BorderBrush="#E7D49D" BorderThickness="1" CornerRadius="3" Padding="12">
                     <StackPanel>
                         <TextBlock Text="本地验收账户" FontWeight="SemiBold" Foreground="#715319" />
-                        <TextBlock Text="管理员：admin / Admin@123" Margin="0,6,0,0" FontFamily="Consolas" />
-                        <TextBlock Text="操作员：operator / Operator@123" Margin="0,3,0,0" FontFamily="Consolas" />
+                        <TextBlock Text="选择验收角色，可自动填入本机测试账户。" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                             <Button Content="填入管理员" Click="FillAdmin_Click" Margin="0,0,8,0" Height="30" MinHeight="30" Padding="10,3" />
                             <Button Content="填入操作员" Click="FillOperator_Click" Height="30" MinHeight="30" Padding="10,3" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
-                <TextBlock Text="账户文件仅保存 PBKDF2-SHA256 密码哈希；以上固定密码只用于本地验收。"
-                           Foreground="{StaticResource MutedTextBrush}" FontSize="9" TextWrapping="Wrap" Margin="0,8,0,0" />
+                <TextBlock Text="快捷填入仅用于本地验收账户。"
+                           Foreground="{StaticResource MutedTextBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0" />
             </StackPanel>
 
             <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
