@@ -7,18 +7,23 @@ namespace VisualInspection.Core.Tests;
 public sealed class ProductionResultStoreTests
 {
     [Theory]
-    [InlineData(InspectionVerdict.Pass, "pass", "PASS")]
-    [InlineData(InspectionVerdict.Fail, "fail", "FAIL")]
+    [InlineData(InspectionVerdict.Pass, "pass", "PASS", 14)]
+    [InlineData(InspectionVerdict.Fail, "fail", "FAIL", 14)]
+    [InlineData(InspectionVerdict.Pass, "pass", "PASS", 1)]
+    [InlineData(InspectionVerdict.Fail, "fail", "FAIL", 1)]
     public async Task AppendAsync_WritesRequiredTxtColumnsAndResultImage(
         InspectionVerdict verdict,
         string resultDirectory,
-        string resultText)
+        string resultText,
+        int completedHour)
     {
         var directory = Path.Combine(Path.GetTempPath(), "VisualInspectionTests", Guid.NewGuid().ToString("N"));
         try
         {
             var store = new ProductionResultStore(directory);
-            var completedAt = new DateTimeOffset(2026, 8, 27, 14, 5, 6, 789, TimeSpan.FromHours(8));
+            var completedAt = new DateTimeOffset(2026, 8, 27, completedHour, 5, 6, 789, TimeSpan.FromHours(8));
+            // Production records use the workstation's local time, including its date boundary.
+            var localTime = TimeZoneInfo.ConvertTime(completedAt, TimeZoneInfo.Local);
             var result = await store.AppendAsync(new ProductionResultRecord
             {
                 Machine = "MACHINE-01",
@@ -42,11 +47,15 @@ public sealed class ProductionResultStoreTests
             });
 
             var lines = await File.ReadAllLinesAsync(result.LogPath);
+            Assert.Equal(2, lines.Length);
             Assert.Equal(ProductionResultStore.Header, lines[0]);
-            Assert.Contains($"MACHINE-01|2026-08-27|14:05:06.789|工站-A|EV-100|E001|SN:001|{resultText}|", lines[1]);
             Assert.NotNull(result.ImagePath);
+            Assert.Equal($"MACHINE-01|{localTime:yyyy-MM-dd}|{localTime:HH:mm:ss.fff}|工站-A|EV-100|E001|SN:001|{resultText}|{result.ImagePath}|", lines[1]);
+            Assert.Equal($"inspection-results-{localTime:yyyyMMdd}.txt", Path.GetFileName(result.LogPath));
             Assert.Contains($"images{Path.DirectorySeparatorChar}{resultDirectory}", result.ImagePath, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains($"SN_001_20260827-140506789_{resultText}.png", result.ImagePath, StringComparison.OrdinalIgnoreCase);
+            // Colon is forbidden in Windows filenames but allowed on Unix hosts running Core tests.
+            var safeSerial = OperatingSystem.IsWindows() ? "SN_001" : "SN:001";
+            Assert.Equal($"{safeSerial}_{localTime:yyyyMMdd-HHmmssfff}_{resultText}.png", Path.GetFileName(result.ImagePath));
             Assert.True(File.Exists(result.ImagePath));
         }
         finally
