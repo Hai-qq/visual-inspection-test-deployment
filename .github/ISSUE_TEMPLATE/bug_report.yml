@@ -1,0 +1,32 @@
+name: 问题反馈 / Bug report
+description: 提交可以复现的安装、使用或文档问题。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "安全问题请使用 [私密报告](https://github.com/Hai-qq/visual-inspection-test-deployment/security/advisories/new)。日志与截图请先脱敏。"
+  - type: input
+    id: environment
+    attributes:
+      label: 版本与环境 / Version and environment
+      description: 项目版本或提交、操作系统、相关运行时或 Agent 宿主。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 最小复现步骤 / Steps to reproduce
+      description: 从干净安装或最小输入开始，列出命令和操作。
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 实际结果与期望结果 / Actual and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏日志或截图 / Sanitized evidence
+      description: 不要上传凭据、现场数据或未经授权的素材。

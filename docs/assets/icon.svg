@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+<title id="title">Visual Inspection</title><desc id="desc">四角检测框围绕蓝色检测目标与确认标记。</desc>
+<rect width="160" height="160" rx="32" fill="#edf3f8"/>
+<g fill="none" stroke="#20394f" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M35 58V35h23M102 35h23v23M125 102v23h-23M58 125H35v-23"/></g>
+<rect x="56" y="56" width="48" height="48" rx="10" fill="#246aab"/>
+<path d="m66 80 10 10 20-23" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

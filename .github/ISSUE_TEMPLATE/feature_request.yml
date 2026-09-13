@@ -1,0 +1,21 @@
+name: 改进建议 / Feature request
+description: 说明一个具体场景、困难和可验证的改进方向。
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景与问题 / Use case and problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案与验收方式 / Proposal and acceptance
+      description: 什么变化能解决问题？如何判断它有效？
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 已尝试的替代方案 / Alternatives considered
