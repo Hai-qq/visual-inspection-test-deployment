@@ -1,11 +1,11 @@
-<p align="center"><img src="docs/assets/icon.svg" width="112" height="112" alt="Visual Inspection 检测框与确认标记"></p>
+<p align="center"><img src="docs/assets/brand/mark.svg" width="144" height="144" alt="取景框、检测点与确认标记"></p>
 
-<h1 align="center">Visual Inspection<br>Test Deployment</h1>
+<h1 align="center">Visual Inspection</h1>
 <p align="center">为 Windows 检测工位配置、执行和交付视觉测试序列。</p>
 <p align="center">
   <a href="https://github.com/Hai-qq/visual-inspection-test-deployment/actions/workflows/ci.yml"><img src="https://github.com/Hai-qq/visual-inspection-test-deployment/actions/workflows/ci.yml/badge.svg" alt="Windows 构建与测试"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-246aab" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/C%23-.NET_8_%C2%B7_WPF-246aab" alt="C# .NET 8 WPF">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-706358" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/C%23-.NET_8_%C2%B7_WPF-706358" alt="C# .NET 8 WPF">
 </p>
 <p align="center"><a href="#快速开始">快速开始</a> · <a href="docs/Sequence与模型交付说明.md">交付 Sequence</a> · <a href="CONTRIBUTING.md">参与开发</a> · <a href="https://github.com/Hai-qq/visual-inspection-test-deployment/issues/new/choose">反馈问题</a></p>
 
